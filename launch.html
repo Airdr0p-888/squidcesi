@@ -680,12 +680,12 @@ async function deployToken() {
     var dividendTrackerAddr = await tokenContract.dividendTracker();
     var ROUTER_ADDR = '0x10ED43C718714eb63d5aA57B78B54704E256024E';  // PancakeSwap V2
 
-    // ── TaxDistributor 四项分配直接传入（bps，总和 = 10000）────
-    // 四项：营销 mktBps / 销毁 burnBps / LP lpBps / 分红 distBps
-    // TaxDistributor 内部：
-    //   - burnBps 部分代币直接烧到 0xdead
-    //   - lpBps 部分加流动性
-    //   - marketingBps + dividendBps 部分 swap → BNB → 分别发送
+    // ── TaxDistributor 八项参数直接传入 ────
+    //   token, marketingWallet, dividendTracker, rewardToken, router,
+    //   marketingBps, dividendBps, lpBps
+    // 说明：
+    //   - rewardToken = address(0) 表示分红用 BNB
+    //   - burnBps 部分在主合约直接销毁，不进 TaxDistributor
 
     var distABI = TAX_DISTRIBUTOR_DATA.ABI;
     var distByte = TAX_DISTRIBUTOR_DATA.BYTECODE;
@@ -695,6 +695,7 @@ async function deployToken() {
       deployedAddr,           // token（主合约地址）
       marketingWalletAddr,    // marketingWallet
       dividendTrackerAddr,    // dividendTracker
+      ethers.constants.AddressZero, // rewardToken（address(0) = BNB 原生分红）
       ROUTER_ADDR,            // router
       ethers.BigNumber.from(mktBps.toString()),   // marketingBps
       ethers.BigNumber.from(distBps.toString()),  // dividendBps
