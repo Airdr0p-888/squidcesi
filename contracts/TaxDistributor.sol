@@ -2,21 +2,20 @@
 pragma solidity ^0.8.0;
 
 /**
- * @title TaxDistributor — BSC 税费分配合约（v4（TokenDistributor 中转 + 多奖励代币）
+ * @title TaxDistributor — BSC 税费分配合约（v5 精简版）
  *
- *  核心改进（借鉴 UniverseLaunch 设计）：
- *  1. TokenDistributor 中转模式
- *     - swap 时 BNB 先打到 TokenDistributor，再 claim 回来
- *     - 隔离风险：swap 过程中 BNB 不在本合约，不会意外触发 receive()
- *  2. 支持多奖励代币配置
- *     - rewardToken = address(0)  → 直接分发 BNB 到 dividendTracker
- *     - rewardToken = WBNB       → wrap BNB 成 WBNB 再分发
- *     - rewardToken = 其他 ERC20 → 用 BNB 买奖励代币再分发
+ *  极简流程：税费代币 → swap 成 BNB → 发给营销钱包
+ *  没有中转合约，BNB 直接进本合约，不会卡住
  *
- *  部署参数（对应 launch.html）：
+ *  仍保留分红和 LP 回流功能（通过 bps 配置开关）：
+ *    - marketingBps + dividendBps + lpBps = 税费分配比例
+ *    - 全部设为 0 时不会处理
+ *    - 只想发营销钱包？设 marketingBps=10000, dividendBps=0, lpBps=0 即可
+ *
+ *  构造参数：
  *   1. token_           — 主代币合约地址
  *   2. marketingWallet_ — 营销收款地址
- *   3. dividendTracker_ — 分红合约地址
+ *   3. dividendTracker_ — 分红合约地址（不需要分红填 address(0)）
  *   4. rewardToken_     — 奖励代币地址（address(0) = BNB）
  *   5. router_          — PancakeSwap V2 Router
  *   6. _marketingBps    — 营销 bps
@@ -79,10 +78,6 @@ interface IUniswapV2Router02 {
     ) external payable returns (uint amountToken, uint amountETH, uint liquidity);
 }
 
-interface IUniswapV2Factory {
-    function getPair(address tokenA, address tokenB) external view returns (address);
-}
-
 // ═══════════════════════════════════════════════════
 //  Ownable
 // ═══════════════════════════════════════════════════
@@ -132,13 +127,6 @@ library SafeERC20 {
         require(ok && (d.length == 0 || abi.decode(d, (bool))), "SafeERC20: transfer failed");
     }
 
-    function safeApprove(IERC20 token, address spender, uint256 value) internal {
-        (bool ok, bytes memory d) = address(token).call(
-            abi.encodeWithSelector(SIG_APPROVE, spender, value)
-        );
-        require(ok && (d.length == 0 || abi.decode(d, (bool))), "SafeERC20: approve failed");
-    }
-
     function safeIncreaseAllowance(IERC20 token, address spender, uint256 newAllowance) internal {
         uint256 current = token.allowance(address(this), spender);
         if (current >= newAllowance) return;
@@ -159,56 +147,7 @@ library SafeERC20 {
 }
 
 // ═══════════════════════════════════════════════════
-//  TokenDistributor（中转合约，隔离 swap 风险）
-// ═══════════════════════════════════════════════════
-//
-//  设计来源：UniverseLaunch 的 TokenDistributor 模式
-//  - swap 时 BNB 先打到本合约，不直接进 TaxDistributor
-//  - 避免 BNB 在 TaxDistributor 触发 receive() 意外逻辑
-//  - owner 是部署者（即 TaxDistributor 合约地址）
-// ═══════════════════════════════════════════════════
-
-contract TokenDistributor is Ownable {
-
-    constructor() Ownable(address(0)) {
-        // msg.sender = TaxDistributor 合约地址，设为 owner
-        _owner = msg.sender;
-        emit OwnershipTransferred(address(0), msg.sender);
-    }
-
-    /**
-     * @notice owner（TaxDistributor 合约）提取 BNB 到指定地址
-     */
-    function claim(address to, uint256 amount) external onlyOwner {
-        require(to != address(0), "TD: zero address");
-        (bool ok, ) = payable(to).call{value: amount}("");
-        require(ok, "TD: transfer failed");
-    }
-
-    /**
-     * @notice 提取 TokenDistributor 内全部 BNB 到指定地址
-     */
-    function claimAll(address to) external onlyOwner {
-        require(to != address(0), "TD: zero address");
-        uint256 bal = address(this).balance;
-        require(bal > 0, "TD: no BNB");
-        (bool ok, ) = payable(to).call{value: bal}("");
-        require(ok, "TD: transfer failed");
-    }
-
-    /**
-     * @notice 救援误转入的 ERC20 代币
-     */
-    function rescueToken(address token_, address to, uint256 amount) external onlyOwner {
-        require(to != address(0), "TD: zero address");
-        IERC20(token_).transfer(to, amount);
-    }
-
-    receive() external payable {}
-}
-
-// ═══════════════════════════════════════════════════
-//  TaxDistributor（主合约）
+//  TaxDistributor（主合约 — 无中转，BNB 直收到本合约）
 // ═══════════════════════════════════════════════════
 
 contract TaxDistributor is Ownable {
@@ -217,12 +156,12 @@ contract TaxDistributor is Ownable {
     // ── 核心配置 ──
     address public token;             // 主代币合约地址
     address public marketingWallet;   // 营销收款地址
-    address public dividendTracker;   // 分红合约地址
+    address public dividendTracker;   // 分红合约地址（address(0) = 不分红）
     address public rewardToken;       // 奖励代币（address(0) = BNB，其他 = ERC20）
     IUniswapV2Router02 public router;
 
     // WBNB 地址（BSC 主网）
-    address public constant WBNB = 0xbb4CDB9CBd36B01bD1cBaEBF2De08d9173bc095c;
+    address public constant WBNB = 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c;
 
     // ── 分配比例（bps，10000 = 100%）──
     uint256 public marketingBps;
@@ -236,9 +175,6 @@ contract TaxDistributor is Ownable {
     // ── 权限控制 ──
     bool public autoProcess = true;
 
-    // ── TokenDistributor 中转合约 ──
-    TokenDistributor public tokenDistributor;
-
     // ── 状态记录 ──
     string  public lastFailureReason;
     uint256 public lastProcessTime;
@@ -246,13 +182,6 @@ contract TaxDistributor is Ownable {
 
     // ── 防重入 ──
     bool private inProcessing;
-
-    modifier lockProcessing() {
-        require(!inProcessing, "TaxDist: reentrant");
-        inProcessing = true;
-        _;
-        inProcessing = false;
-    }
 
     // ── Events ──
     event FeesProcessed(
@@ -276,7 +205,7 @@ contract TaxDistributor is Ownable {
     /**
      * @param token_           主代币合约地址
      * @param marketingWallet_ 营销收款地址
-     * @param dividendTracker_ 分红合约地址
+     * @param dividendTracker_ 分红合约地址（不需要分红填 address(0)）
      * @param rewardToken_     奖励代币地址（address(0) = BNB 原生分红）
      * @param router_          PancakeSwap V2 Router 地址
      * @param _marketingBps   营销分配 bps
@@ -309,14 +238,10 @@ contract TaxDistributor is Ownable {
         marketingBps     = _marketingBps;
         dividendBps      = _dividendBps;
         lpBps            = _lpBps;
-
-        // 部署中转合约，owner = 本合约地址
-        tokenDistributor = new TokenDistributor();
     }
 
-    receive() external payable {
-        // BNB 进入时不做任何操作，避免 swap 过程中意外触发
-    }
+    // BNB 直接进入本合约，空 receive 不做任何操作
+    receive() external payable {}
 
     // ═══════════════════════════════════════════════════
     //  外部触发入口
@@ -329,21 +254,29 @@ contract TaxDistributor is Ownable {
      */
     function processFees() external {
         if (inProcessing) {
-            lastFailureReason = "Already processing, please retry later";
+            lastFailureReason = "Already processing, retry later";
             return;
         }
         if (!autoProcess && msg.sender != owner()) {
             lastFailureReason = "Not authorized (autoProcess=false)";
             return;
         }
-        _doProcess();
+        inProcessing = true;
+        _processCore();
+        inProcessing = false;
     }
 
     /**
      * @notice owner 强制处理（忽略 autoProcess 开关）
      */
     function forceProcess() external onlyOwner {
-        _doProcess();
+        if (inProcessing) {
+            lastFailureReason = "Already processing, retry later";
+            return;
+        }
+        inProcessing = true;
+        _processCore();
+        inProcessing = false;
     }
 
     /**
@@ -355,7 +288,9 @@ contract TaxDistributor is Ownable {
             lastFailureReason = "Already processing, try later";
             return;
         }
-        _tryProcessSafe();
+        inProcessing = true;
+        _processCore();
+        inProcessing = false;
     }
 
     /**
@@ -370,37 +305,14 @@ contract TaxDistributor is Ownable {
     }
 
     // ═══════════════════════════════════════════════════
-    //  核心处理逻辑
+    //  核心处理逻辑（极简版）
+    //
+    //  流程：
+    //  1. 检查代币余额 ≥ minProcessAmount
+    //  2. swap 全部代币 → BNB（直接打到本合约）
+    //  3. 按 bps 分配 BNB：营销 / 分红 / LP
     // ═══════════════════════════════════════════════════
 
-    /**
-     * @dev 带防重入的核心处理函数（供 processFees / forceProcess 调用）
-     *
-     * 处理流程（借鉴 UniverseLaunch）：
-     * 1. 检查余额 ≥ minProcessAmount
-     * 2. 按 bps 拆分 LP 份额和 swap 份额
-     * 3. swap 代币 → BNB，BNB 直接打到 tokenDistributor（中转）
-     * 4. 从 tokenDistributor claim BNB 回本合约
-     * 5. 按 bps 分配 BNB：
-     *    - 营销 → 直接转 BNB 到 marketingWallet
-     *    - 分红 → 根据 rewardToken 类型处理，再转给 dividendTracker
-     *    - LP   → 和代币一起 addLiquidityETH
-     */
-    function _doProcess() public lockProcessing {
-        _processCore();
-    }
-
-    /**
-     * @dev 不带 lockProcessing 的安全版本（供 tryProcess 调用）
-     *      失败时只写 lastFailureReason，不 revert
-     */
-    function _tryProcessSafe() internal {
-        _processCore();
-    }
-
-    /**
-     * @dev 实际处理实现（两个入口共用）
-     */
     function _processCore() internal {
         uint256 balance = IERC20(token).balanceOf(address(this));
 
@@ -417,26 +329,25 @@ contract TaxDistributor is Ownable {
             return;
         }
 
-        // ── 拆分 LP 份额和 swap 份额 ──────────────────────
-        // LP 部分：一半代币留着加底池，一半代币 swap 成 BNB 作底池的 BNB 端
+        // ── 计算 LP 部分需要留多少代币 ──────────────────
+        // LP 部分：一半代币留着加底池，一半代币跟着一起 swap 成 BNB
         uint256 lpTokenTotal  = (balance * lpBps)       / totalBps;
-        uint256 shareToken    = balance - lpTokenTotal;       // 营销 + 分红部分
-        uint256 lpTokenKeep   = lpTokenTotal / 2;            // 直接用于加底池
+        uint256 lpTokenKeep   = lpTokenTotal / 2;            // 直接用于加底池的代币
         uint256 lpTokenToSwap = lpTokenTotal - lpTokenKeep;   // swap → BNB 作底池配对
-        uint256 swapTotal     = shareToken + lpTokenToSwap;
+        uint256 swapTotal     = balance - lpTokenKeep;        // 需要 swap 的总量
 
         if (swapTotal == 0) {
             lastFailureReason = "swapTotal = 0";
             return;
         }
 
-        // ── 授权 Router ──────────────────────────────────
+        // ── 授权 Router ──
         IERC20(token).safeIncreaseAllowance(address(router), swapTotal);
 
-        // ── Step 1: swap 代币 → BNB，BNB 打到 tokenDistributor ──
-        uint256 bnbBeforeSwap = address(tokenDistributor).balance;
+        // ── Step 1: swap 代币 → BNB（BNB 直接进本合约）──
+        uint256 bnbBefore = address(this).balance;
         _swapTokensForBNB(swapTotal);
-        uint256 bnbReceived = address(tokenDistributor).balance - bnbBeforeSwap;
+        uint256 bnbReceived = address(this).balance - bnbBefore;
 
         if (bnbReceived == 0) {
             // lastFailureReason 已在 _swapTokensForBNB 内设置
@@ -444,36 +355,16 @@ contract TaxDistributor is Ownable {
             return;
         }
 
-        // ── Step 2: 从中转合约 claim BNB 回本合约 ──────
-        tokenDistributor.claim(address(this), bnbReceived);
-
         lastProcessTime   = block.timestamp;
         totalFeesProcessed += balance;
 
-        // ── Step 3: 按来源比例拆分 BNB ───────────────────
-        uint256 bnbForLP;
-        uint256 bnbForShare;
+        // ── Step 2: 按 bps 分配 BNB ──────────────────────
+        uint256 bnbForMarketing = (bnbReceived * marketingBps) / totalBps;
+        uint256 bnbForDividend  = (bnbReceived * dividendBps)  / totalBps;
+        uint256 bnbForLP        = bnbReceived - bnbForMarketing - bnbForDividend;
 
-        if (lpTokenToSwap > 0 && swapTotal > 0) {
-            bnbForLP    = (bnbReceived * lpTokenToSwap) / swapTotal;
-            bnbForShare = bnbReceived - bnbForLP;
-        } else {
-            bnbForLP    = 0;
-            bnbForShare = bnbReceived;
-        }
-
-        // ── Step 4: 在 shareToken 对应的 BNB 中再分营销/分红 ──
-        uint256 nonLpBps     = marketingBps + dividendBps;
-        uint256 bnbForMarketing = 0;
-        uint256 bnbForDividend = 0;
-
-        if (nonLpBps > 0) {
-            bnbForMarketing  = (bnbForShare * marketingBps) / nonLpBps;
-            bnbForDividend   = bnbForShare - bnbForMarketing;
-        }
-
-        // ── Step 5: 发送营销 BNB ─────────────────────────
-        if (bnbForMarketing > 0 && marketingWallet != address(0)) {
+        // ── Step 3: 发送营销 BNB ─────────────────────────
+        if (bnbForMarketing > 0) {
             (bool ok, ) = payable(marketingWallet).call{value: bnbForMarketing}("");
             if (!ok) {
                 lastFailureReason = "Marketing BNB transfer failed";
@@ -481,12 +372,12 @@ contract TaxDistributor is Ownable {
             }
         }
 
-        // ── Step 6: 处理分红（根据 rewardToken 类型） ───
+        // ── Step 4: 处理分红 ────────────────────────────
         if (bnbForDividend > 0 && dividendTracker != address(0)) {
             _distributeDividend(bnbForDividend);
         }
 
-        // ── Step 7: 加底池（LP 回流） ────────────────────
+        // ── Step 5: 加底池（LP 回流） ────────────────────
         if (lpTokenKeep > 0 && bnbForLP > 0) {
             _addLiquiditySafe(lpTokenKeep, bnbForLP);
         }
@@ -495,26 +386,19 @@ contract TaxDistributor is Ownable {
     }
 
     // ═══════════════════════════════════════════════════
-    //  分红分发（支持多奖励代币类型）
+    //  分红分发（支持 BNB / WBNB / 其他 ERC20）
     // ═══════════════════════════════════════════════════
 
-    /**
-     * @dev 根据 rewardToken 类型分发分红
-     *
-     *  rewardToken == address(0)  → 直接发 BNB 到 dividendTracker
-     *  rewardToken == WBNB         → wrap 成 WBNB 再发
-     *  rewardToken == 其他 ERC20   → 用 BNB 买代币再发
-     */
     function _distributeDividend(uint256 bnbAmount) internal {
         if (rewardToken == address(0)) {
-            // 模式 1：直接分发 BNB（dividendTracker 需有 receive()）
+            // 模式 1：直接发 BNB
             (bool ok, ) = payable(dividendTracker).call{value: bnbAmount}("");
             if (!ok) {
                 lastFailureReason = "Dividend BNB transfer failed";
                 emit SwapDebug("dividend BNB Xfer failed", bnbAmount);
             }
         } else if (rewardToken == WBNB) {
-            // 模式 2：奖励代币是 WBNB → wrap 后转账
+            // 模式 2：wrap 成 WBNB 再发
             try IWBNB(WBNB).deposit{value: bnbAmount}() {
                 IERC20(WBNB).safeTransfer(dividendTracker, bnbAmount);
             } catch {
@@ -522,7 +406,7 @@ contract TaxDistributor is Ownable {
                 emit SwapDebug("WBNB wrap failed", bnbAmount);
             }
         } else {
-            // 模式 3：奖励代币是其他 ERC20 → 用 BNB 买，再转给 tracker
+            // 模式 3：用 BNB 买奖励代币，直接打到 dividendTracker
             address[] memory path = new address[](2);
             path[0] = WBNB;
             path[1] = rewardToken;
@@ -535,7 +419,6 @@ contract TaxDistributor is Ownable {
                 dividendTracker,
                 block.timestamp + 300
             ) {
-                // 买入成功，dividendTracker 已直接收到奖励代币
                 uint256 trackerBalAfter = IERC20(rewardToken).balanceOf(dividendTracker);
                 if (trackerBalAfter <= trackerBalBefore) {
                     lastFailureReason = "Dividend swap: tracker balance unchanged";
@@ -553,27 +436,23 @@ contract TaxDistributor is Ownable {
     // ═══════════════════════════════════════════════════
 
     /**
-     * @dev swap 代币 → BNB，BNB 打到 tokenDistributor（中转）
-     *      双通道兜底策略：
-     *        通道 1：FOT 版（有转账税的代币，PancakeSwap BSC 首选）
-     *        通道 2：标准版（兜底）
-     *      两个通道均失败时设置 lastFailureReason
-     *      成功时不做任何判断，直接返回
-     *      （调用方用 balance 差值判断实际收到多少）
+     * @dev swap 代币 → BNB，BNB 直接打到本合约 address(this)
+     *      双通道兜底：FOT 版（首选）→ 标准版（兜底）
      */
     function _swapTokensForBNB(uint256 tokenAmount) internal {
-        address[] memory path = _getPath();
+        address[] memory path = new address[](2);
+        path[0] = token;
+        path[1] = router.WETH();   // BSC: WBNB
 
-        // 通道 1：FOT 安全版（首选）
+        // 通道 1：FOT 安全版（首选，支持有转账税的代币）
         try router.swapExactTokensForETHSupportingFeeOnTransferTokens(
             tokenAmount,
-            1,
+            1,                      // amountOutMin = 1 wei
             path,
-            address(tokenDistributor),
+            address(this),          // ← BNB 直接进本合约！
             block.timestamp + 300
         ) {
-            // swap 成功，BNB 已打入 tokenDistributor，直接返回
-            return;
+            return;                  // 成功就返回
         } catch {
             emit SwapDebug("FOT swap failed, trying std", tokenAmount);
         }
@@ -583,10 +462,9 @@ contract TaxDistributor is Ownable {
             tokenAmount,
             1,
             path,
-            address(tokenDistributor),
+            address(this),          // ← BNB 直接进本合约！
             block.timestamp + 300
         ) {
-            // swap 成功，直接返回
             return;
         } catch Error(string memory reason) {
             lastFailureReason = reason;
@@ -599,7 +477,7 @@ contract TaxDistributor is Ownable {
 
     /**
      * @dev 安全加底池（失败不 revert）
-     *      LP Token 发给 owner
+     *      LP Token 发给 0xdead 销毁（锁池）
      */
     function _addLiquiditySafe(uint256 tokenAmt, uint256 bnbAmt) internal {
         IERC20(token).safeIncreaseAllowance(address(router), tokenAmt);
@@ -607,7 +485,7 @@ contract TaxDistributor is Ownable {
             token,
             tokenAmt,
             0, 0,
-            owner(),
+            address(0xdead),        // LP 发到黑洞地址，锁池
             block.timestamp + 300
         ) {
             emit SwapDebug("LP add success", tokenAmt);
@@ -618,12 +496,6 @@ contract TaxDistributor is Ownable {
             lastFailureReason = "LP add failed: unknown";
             emit SwapDebug("LP add failed (unknown)", tokenAmt);
         }
-    }
-
-    function _getPath() internal view returns (address[] memory path) {
-        path = new address[](2);
-        path[0] = token;
-        path[1] = router.WETH();   // BSC: WBNB
     }
 
     // ═══════════════════════════════════════════════════
@@ -641,10 +513,6 @@ contract TaxDistributor is Ownable {
         emit ConfigUpdated("dividendTracker");
     }
 
-    /**
-     * @notice 设置奖励代币地址
-     * @param _rewardToken address(0) = BNB 原生分红；其他 = ERC20 地址
-     */
     function setRewardToken(address _rewardToken) external onlyOwner {
         rewardToken = _rewardToken;
         emit RewardTokenUpdated(_rewardToken);
@@ -701,13 +569,6 @@ contract TaxDistributor is Ownable {
     }
 
     /**
-     * @notice 从中转合约 TokenDistributor 救援 BNB/代币
-     */
-    function rescueFromDistributor(address _to, uint256 _amount) external onlyOwner {
-        tokenDistributor.claim(_to, _amount);
-    }
-
-    /**
      * @notice 提取本合约内 BNB
      */
     function rescueBNB(address _to, uint256 _amount) external onlyOwner {
@@ -719,13 +580,6 @@ contract TaxDistributor is Ownable {
         emit RescueBNB(_to, _amount);
     }
 
-    /**
-     * @notice 提取中转合约内全部 BNB 到 owner（紧急情况）
-     */
-    function rescueAllBNBFromDistributor(address _to) external onlyOwner {
-        tokenDistributor.claimAll(_to);
-    }
-
     // ═══════════════════════════════════════════════════
     //  查询接口
     // ═══════════════════════════════════════════════════
@@ -734,7 +588,6 @@ contract TaxDistributor is Ownable {
         address token_,
         uint256 tokenBalance,
         uint256 bnbBalance,
-        uint256 distributorBnbBalance,
         uint256 minProcessAmt,
         uint256 mktBps,
         uint256 divBps,
@@ -748,7 +601,6 @@ contract TaxDistributor is Ownable {
             token,
             IERC20(token).balanceOf(address(this)),
             address(this).balance,
-            address(tokenDistributor).balance,
             minProcessAmount,
             marketingBps,
             dividendBps,
