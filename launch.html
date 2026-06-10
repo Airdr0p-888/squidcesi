@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SquidLaunch — 一键发射代币</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin:0; padding:0; }
+    :root {
+      --bg:#030812; --bg2:rgba(6,30,50,.65); --bg3:#0d1f33; --bg4:#132940;
+      --border:rgba(0,212,255,.15); --border2:rgba(0,212,255,.25);
+      --cyan:#00d4ff; --magenta:#ff2daa; --green:#00ffb2; --yellow:#ffe600;
+      --danger:#ff4466; --success:#00ffb2; --text:#eaf6ff; --muted:#5a8ab5;
+      --focus:rgba(0,212,255,.3); --radius:10px;
+      --font:'Inter','PingFang SC','Noto Sans SC',system-ui,sans-serif;
+      --mono:'JetBrains Mono','Space Mono',monospace;
+    }
+    body { background:var(--bg); color:var(--text); font-family:var(--font); line-height:1.6; min-height:100vh; }
+    body::after { content:''; position:fixed; inset:0; pointer-events:none; z-index:9999; opacity:.4;
+      background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+    }
+    header { position:sticky; top:0; z-index:200; background:rgba(3,8,18,.92); backdrop-filter:blur(20px); border-bottom:1px solid var(--border); }
+    nav { max-width:1100px; margin:0 auto; padding:0 32px; display:flex; align-items:center; justify-content:space-between; height:68px; }
+    .logo { display:flex; align-items:center; gap:11px; text-decoration:none; }
+    .logo-icon { width:38px; height:38px; border-radius:9px; background:linear-gradient(135deg,var(--cyan),var(--magenta)); display:flex; align-items:center; justify-content:center; font-size:1.3rem; box-shadow:0 0 16px rgba(0,212,255,.25); }
+    .logo-name strong { font-size:1.05rem; font-weight:700; color:var(--cyan); letter-spacing:1.5px; display:block; line-height:1.1; }
+    .logo-name span { font-size:.62rem; color:var(--muted); letter-spacing:2.5px; text-transform:uppercase; }
+    .nav-right { display:flex; align-items:center; gap:10px; }
+    .btn { display:inline-flex; align-items:center; gap:7px; padding:9px 20px; border-radius:8px; font-family:var(--font); font-weight:600; font-size:.875rem; cursor:pointer; text-decoration:none; border:none; transition:all .2s; }
+    .btn-cyan { background:linear-gradient(135deg,var(--cyan),var(--magenta)); color:#0a0a0a; }
+    .btn-cyan:hover { transform:translateY(-2px); box-shadow:0 4px 24px rgba(0,212,255,.35); }
+    .btn-outline { background:transparent; color:var(--text); border:1px solid var(--border2); }
+    .btn-outline:hover { border-color:var(--cyan); color:var(--cyan); }
+    .wallet-chip { font-size:.8rem; color:var(--cyan); font-family:var(--mono); background:rgba(0,212,255,.08); border:1px solid rgba(0,212,255,.2); padding:5px 14px; border-radius:50px; display:none; }
+    .page-hero { text-align:center; padding:60px 24px 44px; position:relative; z-index:1; }
+    .hero-label { display:inline-flex; align-items:center; gap:8px; border:1px solid rgba(0,212,255,.25); background:rgba(0,212,255,.04); padding:5px 16px; border-radius:50px; font-size:.72rem; letter-spacing:2.5px; color:var(--muted); text-transform:uppercase; margin-bottom:18px; }
+    .page-hero h1 { font-size:clamp(1.8rem,4vw,2.8rem); font-weight:700; letter-spacing:-1px; margin-bottom:10px; }
+    .page-hero h1 span { color:var(--cyan); }
+    .page-hero p { color:var(--muted); font-size:.95rem; }
+    .form-container { max-width:680px; margin:0 auto; padding:0 24px 80px; position:relative; z-index:1; }
+    .card { background:var(--bg2); border:1px solid var(--border); border-radius:14px; padding:28px; margin-bottom:24px; }
+    .card-title { font-size:1rem; font-weight:600; color:var(--cyan); margin-bottom:18px; display:flex; align-items:center; gap:8px; }
+    .field { margin-bottom:16px; }
+    .field label { display:block; font-size:.78rem; color:var(--muted); margin-bottom:6px; letter-spacing:.5px; text-transform:uppercase; }
+    .field input, .field select, .field textarea { width:100%; background:var(--bg3); border:1px solid var(--border); border-radius:var(--radius); padding:10px 14px; color:var(--text); font-family:var(--font); font-size:.9rem; transition:border-color .2s; }
+    .field input:focus, .field select:focus { outline:none; border-color:var(--cyan); box-shadow:0 0 0 3px var(--focus); }
+    .field .hint { font-size:.7rem; color:var(--muted); margin-top:4px; }
+    .row2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+    .row3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; }
+    .checkbox-field { display:flex; align-items:center; gap:10px; margin-bottom:14px; }
+    .checkbox-field input[type=checkbox] { width:18px; height:18px; accent-color:var(--cyan); }
+    .checkbox-field label { font-size:.85rem; color:var(--text); cursor:pointer; }
+    .radio-group { display:flex; gap:10px; margin-bottom:14px; flex-wrap:wrap; }
+    .radio-item { position:relative; }
+    .radio-item input { position:absolute; opacity:0; pointer-events:none; }
+    .radio-item label { display:inline-block; padding:8px 18px; border-radius:50px; border:1px solid var(--border2); font-size:.8rem; cursor:pointer; transition:all .2s; }
+    .radio-item input:checked + label { border-color:var(--cyan); color:var(--cyan); background:rgba(0,212,255,.08); }
+    .slider-row { display:flex; align-items:center; gap:14px; }
+    .slider-row input[type=range] { flex:1; accent-color:var(--cyan); }
+    .slider-val { font-family:var(--mono); font-size:.85rem; color:var(--cyan); min-width:48px; text-align:right; }
+    .deploy-btn { width:100%; padding:16px; font-size:1.05rem; font-weight:700; border-radius:12px; margin-top:8px; }
+    .result-box { background:var(--bg3); border:1px solid var(--border2); border-radius:var(--radius); padding:20px; margin-top:24px; display:none; }
+    .result-box h3 { color:var(--success); margin-bottom:10px; }
+    .result-box code { font-size:.72rem; line-height:1.8; word-break:break-all; color:var(--muted); }
+    .result-box a { color:var(--cyan); text-decoration:none; font-size:.82rem; }
+    /* Modal */
+    .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.7); backdrop-filter:blur(6px); z-index:9998; display:none; align-items:center; justify-content:center; }
+    .modal-box { background:var(--bg2); border:1px solid var(--border2); border-radius:16px; padding:36px 44px; text-align:center; min-width:320px; max-width:90vw; }
+    .modal-icon { font-size:2.4rem; margin-bottom:12px; }
+    .modal-title { font-size:1.1rem; font-weight:600; margin-bottom:8px; }
+    .modal-desc { font-size:.82rem; color:var(--muted); }
+    .modal-bar { width:100%; height:4px; background:var(--bg4); border-radius:2px; margin-top:18px; overflow:hidden; }
+    .modal-bar-inner { height:100%; width:40%; background:var(--cyan); border-radius:2px; animation:barPulse 1.2s ease-in-out infinite; }
+    @keyframes barPulse { 0%,100%{width:30%} 50%{width:70%} }
+    .hidden { display:none!important; }
+  </style>
+</head>
+<body>
+
+<header>
+  <nav>
+    <a class="logo" href="index.html">
+      <div class="logo-icon">🦑</div>
+      <div class="logo-name"><strong>SQUIDLAUNCH</strong><span>Token Launcher</span></div>
+    </a>
+    <div class="nav-right">
+      <div class="wallet-chip" id="walletChip">未在连接</div>
+      <button class="btn btn-outline" id="btnConnect" onclick="connectWallet()">连接钱包</button>
+    </div>
+  </nav>
+</header>
+
+<section class="page-hero">
+  <div class="hero-label">🚀 FAIR LAUNCH PLATFORM</div>
+  <h1>发射你的 <span>代币</span></h1>
+  <p>一键部署代币合约到 BSC 链 — 支持 Mint 模式、开盘控制、白名单</p>
+</section>
+
+<div class="form-container">
+
+  <!-- 基础信息 -->
+  <div class="card">
+    <div class="card-title">🪙 代币基础信息</div>
+    <div class="row2">
+      <div class="field">
+        <label>代币名称</label>
+        <input type="text" id="t_name" placeholder="e.g. Squid Token" />
+      </div>
+      <div class="field">
+        <label>代币符号</label>
+        <input type="text" id="t_symbol" placeholder="e.g. SQUID" maxlength="10" style="text-transform:uppercase" />
+      </div>
+    </div>
+    <div class="field">
+      <label>总供应量（代币个数，非 wei）</label>
+      <input type="number" id="t_supply" placeholder="e.g. 1000000" min="1" oninput="calcMintInfo()" />
+      <div class="hint">合约自动 × 10^18</div>
+    </div>
+  </div>
+
+  <!-- Mint 配置 -->
+  <div class="card">
+    <div class="card-title">💰 Mint 配置（公平发射）</div>
+    <div class="hint" style="margin-bottom:14px">
+      📌 <b>ModaMint 公平发射规则</b><br/>
+      • 每次 Mint 固定 BNB 价格，获得固定代币数量<br/>
+      • 每笔 Mint 自动将 BNB + LP代币 添加流动性<br/>
+      • 满额后根据所选开盘模式决定是否自动开启交易<br/>
+      • RENOUNCED 状态：Owner 可弃权，弃权后不可逆
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label>单次 Mint 价格（BNB）</label>
+        <input type="number" id="t_mintCostBNB" placeholder="e.g. 0.01" step="any" min="0" oninput="calcMintInfo()" />
+        <div class="hint">用户每次参与 Mint 需要支付的 BNB 数量</div>
+      </div>
+      <div class="field">
+        <label>满额总量（BNB）</label>
+        <input type="number" id="t_fillBNB" placeholder="e.g. 10" step="any" min="0" oninput="calcMintInfo()" />
+        <div class="hint">预售 BNB 硬顶，达到后的行为取决于「开盘模式」选择</div>
+      </div>
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label>预售占比（%，1-99）</label>
+        <input type="number" id="t_presalePct" value="50" min="1" max="99" oninput="calcMintInfo()" />
+        <div class="hint">用于预售的代币占总供应量的百分比</div>
+      </div>
+      <div class="field">
+        <label>LP 比例（%，0-100）</label>
+        <input type="number" id="t_lpPct" value="100" min="0" max="100" oninput="calcMintInfo()" />
+        <div class="hint">每次 Mint 额外用于加底池的代币比例（相对于用户得到的代币）</div>
+      </div>
+    </div>
+    <div class="row2" style="margin-top:12px">
+      <div class="field">
+        <label>单份代币数量</label>
+        <input type="text" id="tokensPerMint" readonly placeholder="填价格和满额后自动计算" style="font-family:var(--monospace);color:var(--gold)" />
+      </div>
+      <div class="field">
+        <label>满额需要几次 Mint</label>
+        <input type="text" id="totalMints" readonly placeholder="填价格和满额后自动计算" style="font-family:var(--monospace);color:var(--gold)" />
+      </div>
+    </div>
+  </div>
+
+  <!-- 税费 -->
+  <div class="card">
+    <div class="card-title">📊 税费 & 限制</div>
+    <div class="field">
+      <label>买入税（%）：<span id="buyTaxVal">0</span>%</label>
+      <div class="slider-row">
+        <input type="range" id="buyTaxSlider" min="0" max="25" value="0" oninput="buyTaxVal.textContent=this.value" />
+      </div>
+    </div>
+    <div class="field">
+      <label>卖出税（%）：<span id="sellTaxVal">0</span>%</label>
+      <div class="slider-row">
+        <input type="range" id="sellTaxSlider" min="0" max="25" value="0" oninput="sellTaxVal.textContent=this.value" />
+      </div>
+    </div>
+  </div>
+
+  <!-- 税收分配 -->
+  <div class="card">
+    <div class="card-title">📊 税收分配（四项独立，总和必须 = 100%）</div>
+    <div class="hint" style="margin-bottom:6px">
+      四个滑块各自独立拖动。拖动任意一个时<b>不会影响其他三项</b>，超出剩余空间自动截断。
+    </div>
+    <div style="font-size:.78rem;margin-bottom:12px;padding:6px 14px;background:var(--bg3);border-radius:8px;display:inline-block">
+      ⚡ 剩余可分配：<strong id="taxRemaining" style="font-size:1rem;color:var(--danger)">0%</strong>
+    </div>
+
+    <div class="field">
+      <label><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--gold);margin-right:6px;vertical-align:middle"></span>营销：<strong id="taxMktVal">0</strong>%</label>
+      <div class="slider-row">
+        <span style="color:var(--muted);font-size:.72rem">0</span>
+        <input type="range" id="taxMktSlider" min="0" max="100" value="0" oninput="onTaxAllocChange('marketing')" />
+        <span style="color:var(--muted);font-size:.72rem">100</span>
+      </div>
+    </div>
+
+    <div class="field">
+      <label><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--red);margin-right:6px;vertical-align:middle"></span>销毁：<strong id="taxBurnVal">0</strong>%</label>
+      <div class="slider-row">
+        <span style="color:var(--muted);font-size:.72rem">0</span>
+        <input type="range" id="taxBurnSlider" min="0" max="100" value="0" oninput="onTaxAllocChange('burn')" />
+        <span style="color:var(--muted);font-size:.72rem">100</span>
+      </div>
+    </div>
+
+    <div class="field">
+      <label><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--cyan);margin-right:6px;vertical-align:middle"></span>回流底池：<strong id="taxLpVal">0</strong>%</label>
+      <div class="slider-row">
+        <span style="color:var(--muted);font-size:.72rem">0</span>
+        <input type="range" id="taxLpSlider" min="0" max="100" value="0" oninput="onTaxAllocChange('lp')" />
+        <span style="color:var(--muted);font-size:.72rem">100</span>
+      </div>
+    </div>
+
+    <div class="field">
+      <label><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--green);margin-right:6px;vertical-align:middle"></span>分红：<strong id="taxDistVal">0</strong>%</label>
+      <div class="slider-row">
+        <span style="color:var(--muted);font-size:.72rem">0</span>
+        <input type="range" id="taxDistSlider" min="0" max="100" value="0" oninput="onTaxAllocChange('distribute')" />
+        <span style="color:var(--muted);font-size:.72rem">100</span>
+      </div>
+    </div>
+
+    <div class="hint" style="margin-top:8px;padding:6px 10px;background:var(--bg3);border-radius:6px;font-size:.72rem">
+      💡 四项各自独立拖动，超出剩余空间时自动截断当前项。<br>
+      总和必须为 100%，当前：<strong id="taxSumDisplay">0</strong>%
+    </div>
+
+    <!-- 分配可视化条 -->
+    <div style="display:flex;height:14px;border-radius:7px;overflow:hidden;margin-top:12px;background:var(--border)">
+      <div id="taxBarMkt" style="background:var(--gold);width:0%;transition:width .2s"></div>
+      <div id="taxBarBurn" style="background:var(--red);width:0%;transition:width .2s"></div>
+      <div id="taxBarLp" style="background:var(--cyan);width:0%;transition:width .2s"></div>
+      <div id="taxBarDist" style="background:var(--green);width:0%;transition:width .2s"></div>
+    </div>
+
+    <div class="field" style="margin-top:14px">
+      <label>营销收款地址（留空 = 使用 Owner 钱包）</label>
+      <input type="text" id="t_marketingWallet" placeholder="0x..." />
+      <div class="hint">税收中营销部分打到这个地址，留空默认用项目方钱包</div>
+    </div>
+  </div>
+
+  <!-- 白名单 -->
+  <div class="card">
+    <div class="card-title">🛡️ 白名单模式</div>
+    <div class="checkbox-field">
+      <input type="checkbox" id="whitelistChk" />
+      <label for="whitelistChk">开启白名单模式（仅白名单地址可 Mint）</label>
+    </div>
+    <div class="hint">
+      开启后只有被添加到白名单的地址才能参与 Mint。部署后可在<b>管理员界面</b>添加/移除白名单地址。
+    </div>
+  </div>
+</div>
+
+    <!-- 开盘模式 -->
+  <div class="card">
+    <div class="card-title">🚀 开盘模式</div>
+    <div class="hint" style="margin-bottom:14px">
+      📌 <b>自动开盘</b>：预售满额后合约自动开启交易<br/>
+      📌 <b>手动开盘</b>：预售满额后需到管理员界面手动开启交易
+    </div>
+    <div class="row2" style="align-items:center">
+      <div class="field" style="flex:1">
+        <label>选择开盘模式</label>
+        <select id="t_autoOpen" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg2);color:var(--text);font-size:.85rem">
+          <option value="true" selected>🚀 自动开盘（满额自动开启交易）</option>
+          <option value="false">🛑 手动开盘（满额后需手动开启）</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+<!-- 分红设置 -->
+  <div class="card">
+    <div class="card-title">🎁 分红设置</div>
+    <div class="hint" style="margin-bottom:14px">
+      ✓ 分红合约由代币合约<b>自动部署</b>，无需额外操作<br/>
+      ✓ 卖出时税费代币自动转发到税费分配合约 → swap 成 BNB<br/>
+      ✓ 分配合约按四项独立分配：营销 / 销毁 / 回流底池 / 分红<br/>
+      ✓ 持币用户可领取自己的分红份额
+    </div>
+    <div class="field">
+      <label>最低持币分红门槛（代币个数，0 = 无门槛）</label>
+      <input type="number" id="t_minDividend" placeholder="0" step="any" min="0" value="0" />
+      <div class="hint">持币低于此数量的地址不参与分红累计。填 0 表示所有人都有分红资格。</div>
+    </div>
+  </div>
+
+<!-- Vanity 地址 -->
+  <div class="card">
+    <div class="card-title">✨ 靓号地址（可选）</div>
+    <div class="field">
+      <label>尾号后缀（合约地址以该字符串结尾，空 = 随机地址）</label>
+      <input type="text" id="vanitySuffix" value="0000" placeholder="e.g. 6666" maxlength="8" />
+      <div class="hint">越长碰撞越慢；4 位约需 20 万次尝试，8 位可能需要数亿次</div>
+    </div>
+  </div>
+
+  <!-- 部署 -->
+  <button class="btn btn-cyan deploy-btn" id="btnLaunch" onclick="deployToken()">🚀 立即发射代币</button>
+
+  <!-- 结果 -->
+  <div class="result-box" id="deployResult">
+    <h3>✅ 部署成功！</h3>
+    <div style="margin-bottom:10px">
+      <a href="#" id="bscLink" target="_blank">在 BscScan 查看合约 →</a>
+      <a href="#" id="mintLink" target="_blank" style="display:inline-block;margin-top:8px;color:var(--green);font-size:.82rem;">🚀 参与 Mint →</a>
+    </div>
+    <div id="constructorArgs" style="margin-top:10px"></div>
+  </div>
+</div>
+
+<!-- Modal -->
+<div class="modal-overlay" id="modal">
+  <div class="modal-box">
+    <div class="modal-icon" id="modalIcon">⏳</div>
+    <div class="modal-title" id="modalTitle">部署中...</div>
+    <div class="modal-desc" id="modalDesc"></div>
+    <div class="modal-bar"><div class="modal-bar-inner"></div></div>
+  </div>
+</div>
+
+<script src="ethers.umd.min.js"></script>
+<script src="contract_data.js"></script>
+<script src="tracker_data.js"></script>
+<script src="tax_distributor_data.js"></script>
+<script src="vanity_deployer_data.js"></script>
+<script>
+/* ── Globals ── */
+var signer, userAddr;
+
+var PLATFORM_WALLET = '0x8fDb0a964BEDA0dA705d2Fe5af2fb9a7001CBb36';
+
+// 页面加载时绑定事件
+document.getElementById('t_supply')?.addEventListener('input', calcMintInfo);
+document.getElementById('t_presalePct')?.addEventListener('input', calcMintInfo);
+document.getElementById('t_mintCostBNB')?.addEventListener('input', calcMintInfo);
+document.getElementById('t_fillBNB')?.addEventListener('input', calcMintInfo);
+document.getElementById('t_lpPct')?.addEventListener('input', calcMintInfo);
+
+/* ── Auto calc mint info ── */
+function calcMintInfo() {
+  var supply  = parseInt(document.getElementById('t_supply')?.value) || 0;
+  var presalePct = parseInt(document.getElementById('t_presalePct')?.value) || 0;
+  var mintCostBNB = parseFloat(document.getElementById('t_mintCostBNB')?.value) || 0;
+  var fillBNB = parseFloat(document.getElementById('t_fillBNB')?.value) || 0;
+  var lpPct = parseInt(document.getElementById('t_lpPct')?.value) || 0;
+  var tpBox = document.getElementById('tokensPerMint');
+  var tmBox = document.getElementById('totalMints');
+
+  var missing = [];
+  if (!supply)     missing.push('总供应量');
+  if (!presalePct) missing.push('预售占比');
+  if (!mintCostBNB) missing.push('单次Mint价格');
+  if (!fillBNB)    missing.push('满额总量');
+
+  if (missing.length > 0) {
+    tpBox.value = '缺少：' + missing.join('、');
+    tmBox.value = '缺少：' + missing.join('、');
+    return;
+  }
+
+  if (mintCostBNB > fillBNB) {
+    tpBox.value = '⚠ 单价不能大于满额总量';
+    tmBox.value = '⚠ 单价不能大于满额总量';
+    return;
+  }
+
+  var totalMints = Math.floor(fillBNB / mintCostBNB);
+  var presaleTokens = supply * presalePct / 100;
+  var tokensPerMint = Math.floor(presaleTokens / totalMints);
+  var tokensPerLP = Math.floor(tokensPerMint * lpPct / 100);
+
+  if (tokensPerMint <= 0) {
+    tpBox.value = '⚠ tokensPerMint = 0！Solidity 整数除法截断为 0';
+    tpBox.style.color = '#f87171';
+    tmBox.value = '⚠ 请增大总供应量或减小满额总量';
+    tmBox.style.color = '#f87171';
+    return;
+  }
+  tpBox.style.color = '';
+  tmBox.style.color = '';
+
+  tpBox.value = tokensPerMint.toLocaleString() + ' 个代币（+ ' + tokensPerLP.toLocaleString() + ' LP）';
+  tmBox.value = totalMints + ' 次 Mint';
+}
+
+/* ── 税收分配滑块 ──
+   四个独立滑块，各自拖动，互不影响。
+   超出剩余空间时自动截断当前滑块。
+   部署时校验四项之和 = 100%。
+────────────────────────────────────────── */
+var _taxVals = { marketing:0, burn:0, lp:0, distribute:0 };
+
+function onTaxAllocChange(changed) {
+  var sliderIds = {
+    marketing:'taxMktSlider', burn:'taxBurnSlider',
+    lp:'taxLpSlider', distribute:'taxDistSlider'
+  };
+  var displayIds = {
+    marketing:'taxMktVal', burn:'taxBurnVal',
+    lp:'taxLpVal', distribute:'taxDistVal'
+  };
+
+  var slider = document.getElementById(sliderIds[changed]);
+  var newVal = parseInt(slider.value) || 0;
+
+  // 计算其他三项之和，当前项上限 = 剩余空间
+  var otherSum = 0;
+  for (var k in _taxVals) {
+    if (k !== changed) otherSum += _taxVals[k];
+  }
+  var capped = Math.min(newVal, 100 - otherSum);
+  if (capped !== newVal) slider.value = capped;
+
+  _taxVals[changed] = capped;
+  document.getElementById(displayIds[changed]).textContent = capped;
+
+  updateTaxBar();
+  updateTaxRemaining();
+}
+
+function updateTaxBar() {
+  document.getElementById('taxBarMkt').style.width  = _taxVals.marketing + '%';
+  document.getElementById('taxBarBurn').style.width = _taxVals.burn + '%';
+  document.getElementById('taxBarLp').style.width   = _taxVals.lp + '%';
+  document.getElementById('taxBarDist').style.width = _taxVals.distribute + '%';
+}
+
+function updateTaxRemaining() {
+  var sum = _taxVals.marketing + _taxVals.burn + _taxVals.lp + _taxVals.distribute;
+  // 剩余可分配
+  var r = 100 - sum;
+  var elR = document.getElementById('taxRemaining');
+  elR.textContent = r + '%';
+  elR.style.color = r === 0 ? 'var(--green)' : 'var(--danger)';
+  // 总和显示
+  var elS = document.getElementById('taxSumDisplay');
+  elS.textContent = sum;
+  elS.style.color = sum === 100 ? 'var(--green)' : 'var(--danger)';
+}
+
+/* ── Distributor mode (removed, tracker auto-deployed) ── */
+
+/* ── Modal ── */
+function openModal()  { document.getElementById('modal').style.display = 'flex'; }
+function closeModal() { document.getElementById('modal').style.display = 'none'; }
+function setModalStatus(title, desc, icon) {
+  if (title) document.getElementById('modalTitle').textContent = title;
+  if (desc)  document.getElementById('modalDesc').textContent  = desc;
+  if (icon)  document.getElementById('modalIcon').textContent  = icon;
+}
+
+/* ── Wallet ── */
+async function connectWallet() {
+  if (!window.ethereum) { alert('请安装 MetaMask！'); return; }
+  try {
+    await window.ethereum.request({ method: 'eth_requestAccounts' });
+    var provider = new ethers.providers.Web3Provider(window.ethereum);
+    signer   = provider.getSigner();
+    userAddr = await signer.getAddress();
+    document.getElementById('walletChip').textContent = userAddr.slice(0,6) + '...' + userAddr.slice(-4);
+    document.getElementById('walletChip').style.display = 'inline-block';
+    document.getElementById('btnConnect').textContent = '已连接';
+    document.getElementById('btnConnect').disabled = true;
+  } catch(e) { console.error(e); alert('连接钱包失败：' + e.message); }
+}
+
+/* ═══════════ Vanity Deployer (CREATE2) ═══════════ */
+var VANITY_FACTORY_ADDR = localStorage.getItem('vanity_factory_addr') || '';
+
+async function ensureVanityFactory(signer) {
+  if (VANITY_FACTORY_ADDR) return VANITY_FACTORY_ADDR;
+  setModalStatus('🚀 部署 CREATE2 工厂合约...', '请确认钱包交易', '🚀');
+  try {
+    var factoryFactory = new ethers.ContractFactory(VANITY_DEPLOYER_ABI, VANITY_DEPLOYER_BYTECODE, signer);
+    var factoryContract = await factoryFactory.deploy();
+    setModalStatus('等待工厂合约确认...', '区块确认中', '⏳');
+    await factoryContract.deployTransaction.wait(1);
+    VANITY_FACTORY_ADDR = factoryContract.address;
+    localStorage.setItem('vanity_factory_addr', VANITY_FACTORY_ADDR);
+    return VANITY_FACTORY_ADDR;
+  } catch(e) { throw new Error('部署 Vanity 工厂失败：' + (e.reason || e.message)); }
+}
+
+async function findSaltForSuffix(suffix, creationCode, factoryAddr) {
+  suffix = suffix.toLowerCase();
+  var salt = ethers.utils.randomBytes(32);
+  // 动态计算尝试次数：16^suffix.length * 3（3倍期望），最低50000次
+  var base = 1;
+  for (var i = 0; i < suffix.length; i++) base *= 16;
+  var maxAttempts = Math.max(50000, base * 3);
+  // 上限500万次（防止浏览器卡死）
+  if (maxAttempts > 5000000) maxAttempts = 5000000;
+  var codeHash = ethers.utils.keccak256(creationCode);
+  var attempts = 0;
+  setModalStatus('🔍 碰撞靓号尾号 0x...' + suffix, '尝试次数：0', '🔍');
+  while (attempts < maxAttempts) {
+    var saltHex = ethers.utils.hexlify(salt);
+    var encoded = ethers.utils.solidityPack(['bytes1','address','bytes32','bytes32'],['0xff', factoryAddr, saltHex, codeHash]);
+    var addr = '0x' + ethers.utils.keccak256(encoded).slice(26);
+    if (addr.toLowerCase().endsWith(suffix)) {
+      return { salt: saltHex, address: addr };
+    }
+    var saltBN = ethers.BigNumber.from(saltHex);
+    salt = ethers.utils.arrayify(saltBN.add(1).toHexString());
+    if (salt.length < 32) salt = ethers.utils.zeroPad(salt, 32);
+    attempts++;
+    if (attempts % 10000 === 0) {
+      setModalStatus('🔍 碰撞靓号 0x...' + suffix, '尝试次数：' + attempts, '🔍');
+      await new Promise(r => setTimeout(r, 0));
+    }
+  }
+  throw new Error('靓号尾号「' + suffix + '」在 ' + maxAttempts + ' 次尝试内未找到，请缩短尾号');
+}
+
+async function deployWithCreate2(creationCode, saltHex, factoryAddr, signer) {
+  var factoryABI = [{"inputs":[{"name":"bytecode","type":"bytes"},{"name":"salt","type":"bytes32"}],"name":"deploy","outputs":[{"name":"addr","type":"address"}],"stateMutability":"nonpayable","type":"function"}];
+  var factory = new ethers.Contract(factoryAddr, factoryABI, signer);
+  setModalStatus('🚀 通过 CREATE2 部署中...', '请在钱包中确认交易', '🚀');
+  var tx = await factory.deploy(creationCode, saltHex, { value: 0 });
+  setModalStatus('等待确认...', '区块确认中', '⏳');
+  var receipt = await tx.wait(1);
+  var deployedAddr = null;
+  for (var i = 0; i < receipt.logs.length; i++) {
+    var log = receipt.logs[i];
+    if (log.address.toLowerCase() === factoryAddr.toLowerCase() && log.topics.length >= 2) {
+      deployedAddr = '0x' + log.topics[1].slice(26);
+      break;
+    }
+  }
+  if (!deployedAddr) {
+    var codeHash = ethers.utils.keccak256(creationCode);
+    var encoded = ethers.utils.solidityPack(['bytes1','address','bytes32','bytes32'],['0xff',factoryAddr,saltHex,codeHash]);
+    deployedAddr = '0x' + ethers.utils.keccak256(encoded).slice(26);
+  }
+  return deployedAddr;
+}
+
+/* ═══════════ Deploy (ModaMintToken) ═══════════ */
+async function deployToken() {
+  if (!signer) { alert('请先连接钱包！'); return; }
+
+  // ── Read form ──
+  var name    = (document.getElementById('t_name')?.value || '').trim();
+  var symbol  = (document.getElementById('t_symbol')?.value || '').trim().toUpperCase();
+  var supply  = parseInt(document.getElementById('t_supply')?.value) || 0;
+  var mintCostBNBVal = parseFloat(document.getElementById('t_mintCostBNB')?.value) || 0;
+  var fillBNBVal     = parseFloat(document.getElementById('t_fillBNB')?.value) || 0;
+  var presalePct = parseInt(document.getElementById('t_presalePct')?.value) || 50;
+  var lpPct      = parseInt(document.getElementById('t_lpPct')?.value) || 0;
+  var buyTaxBps  = Math.round(parseFloat(document.getElementById('buyTaxSlider').value) * 100);
+  var sellTaxBps = Math.round(parseFloat(document.getElementById('sellTaxSlider').value) * 100);
+
+  var whitelistOnly = document.getElementById('whitelistChk')?.checked || false;
+  var autoOpenTrading = document.getElementById('t_autoOpen')?.value !== 'false';  // true = 自动开盘
+
+  // ── 税收分配 ──
+  var taxAllocMkt  = parseInt(document.getElementById('taxMktSlider')?.value) || 0;
+  var taxAllocBurn = parseInt(document.getElementById('taxBurnSlider')?.value) || 0;
+  var taxAllocLp   = parseInt(document.getElementById('taxLpSlider')?.value) || 0;
+  var taxAllocDist = parseInt(document.getElementById('taxDistSlider')?.value) || 0;
+  var allocSum = taxAllocMkt + taxAllocBurn + taxAllocLp + taxAllocDist;
+  // 百分比 → bps（万分之一）
+  var mktBps  = taxAllocMkt * 100;
+  var burnBps = taxAllocBurn * 100;
+  var lpBps   = taxAllocLp * 100;
+  var distBps = taxAllocDist * 100;
+
+  // 营销钱包
+  var mktWalletInput = (document.getElementById('t_marketingWallet')?.value || '').trim();
+  var marketingWalletAddr = mktWalletInput || userAddr;
+
+  // 分红门槛
+  var minDividendVal = parseFloat(document.getElementById('t_minDividend')?.value) || 0;
+  var minDividendWei = minDividendVal > 0 ? ethers.utils.parseEther(minDividendVal.toString()) : ethers.BigNumber.from(0);
+
+  // ── Validate ──
+  if (!name || !symbol)     { alert('请填写代币名称和符号！'); return; }
+  if (supply <= 0)           { alert('总供应量必须大于 0！'); return; }
+  if (mintCostBNBVal <= 0)   { alert('单次Mint价格必须大于 0！'); return; }
+  if (fillBNBVal <= 0)       { alert('满额总量必须大于 0！'); return; }
+  if (mintCostBNBVal > fillBNBVal) { alert('单次Mint价格不能大于满额总量！'); return; }
+  if (allocSum !== 100)      { alert('税收分配四项总和必须为 100%！当前：' + allocSum + '%'); return; }
+  if (presalePct < 1 || presalePct > 99) { alert('预售占比必须在 1-99 之间！'); return; }
+  if (lpPct > 100)           { alert('LP比例不能超过 100%！'); return; }
+
+  var supplyWei  = ethers.BigNumber.from(Math.floor(supply).toString());
+  var mintCostWei = ethers.utils.parseEther(mintCostBNBVal.toString());
+  var fillWei     = ethers.utils.parseEther(fillBNBVal.toString());
+
+  openModal();
+  setModalStatus('🚀 正在部署主合约...', '请在钱包中确认第一笔交易', '🚀');
+
+  try {
+    var ABI      = CONTRACT_DATA.ABI;
+    var BYTECODE = CONTRACT_DATA.BYTECODE;
+
+    // Encode 16 constructor arguments for ModaMintToken
+    var iface = new ethers.utils.Interface(ABI);
+    var encodedArgs = iface.encodeDeploy([
+      name,                                    // 1. name_
+      symbol,                                  // 2. symbol_
+      supplyWei,                               // 3. totalSupply_
+      mintCostWei,                             // 4. mintCostBNB_
+      fillWei,                                 // 5. fillBNB_
+      ethers.BigNumber.from(buyTaxBps.toString()),   // 6. buyTax_
+      ethers.BigNumber.from(sellTaxBps.toString()),  // 7. sellTax_
+      ethers.BigNumber.from(mktBps.toString()),     // 8. marketingPct_
+      ethers.BigNumber.from(burnBps.toString()),    // 9. burnPct_
+      ethers.BigNumber.from(distBps.toString()),    // 10. dividendPct_
+      ethers.BigNumber.from(lpBps.toString()),      // 11. liquidityPct_
+      marketingWalletAddr,                     // 12. marketingWallet_
+      minDividendWei,                          // 13. minHoldForDividend_
+      ethers.BigNumber.from(presalePct.toString()),  // 14. presaleTokenPct_
+      whitelistOnly,                           // 15. whitelistMintOnly_
+      ethers.BigNumber.from(lpPct.toString()),       // 16. lpTokenPct_
+      autoOpenTrading                                      // 17. autoOpenTrading_
+    ]).slice(2);
+
+    var creationCode = BYTECODE + encodedArgs;
+    var suffix = (document.getElementById('vanitySuffix')?.value || '').trim().toLowerCase().replace(/^0x/, '');
+    var deployedAddr = null;
+
+    if (suffix.length >= 1 && suffix.length <= 8) {
+      try {
+        var factoryAddr = await ensureVanityFactory(signer);
+        setModalStatus('🔍 碰撞靓号尾号 0x...' + suffix, '计算中...', '🔍');
+        var vanityResult = await findSaltForSuffix(suffix, creationCode, factoryAddr);
+        deployedAddr = await deployWithCreate2(creationCode, vanityResult.salt, factoryAddr, signer);
+      } catch(e) {
+        if (confirm('靓号碰撞失败：' + e.message + '\n\n是否用随机地址继续部署？')) {
+          suffix = '';
+        } else { closeModal(); return; }
+      }
+    }
+
+    if (!deployedAddr) {
+      setModalStatus('🚀 正在部署主合约...', '请在钱包中确认交易', '🚀');
+      var factory = new ethers.ContractFactory(ABI, BYTECODE, signer);
+      var contract = await factory.deploy(
+        name, symbol,
+        supplyWei,
+        mintCostWei, fillWei,
+        ethers.BigNumber.from(buyTaxBps.toString()),
+        ethers.BigNumber.from(sellTaxBps.toString()),
+        ethers.BigNumber.from(mktBps.toString()),
+        ethers.BigNumber.from(burnBps.toString()),
+        ethers.BigNumber.from(distBps.toString()),
+        ethers.BigNumber.from(lpBps.toString()),
+        marketingWalletAddr,
+        minDividendWei,
+        ethers.BigNumber.from(presalePct.toString()),
+        whitelistOnly,
+        ethers.BigNumber.from(lpPct.toString()),
+        autoOpenTrading
+      );
+      setModalStatus('⏳ 等待主合约确认...', '区块确认中', '⏳');
+      await contract.deployTransaction.wait(1);
+      deployedAddr = contract.address;
+    }
+
+    // ═══════════════════════════════════════════
+    //  第二步：部署 TaxDistributor
+    // ═══════════════════════════════════════════
+    setModalStatus('🔧 正在部署税费分配合约...', '请在钱包中确认第二笔交易', '🔧');
+
+    // 获取 dividendTracker 地址和 router 地址
+    var tokenContract = new ethers.Contract(deployedAddr, CONTRACT_DATA.ABI, signer);
+    var dividendTrackerAddr = await tokenContract.dividendTracker();
+    var ROUTER_ADDR = '0x10ED43C718714eb63d5aA57B78B54704E256024E';  // PancakeSwap V2
+
+    // ── TaxDistributor 四项分配直接传入（bps，总和 = 10000）────
+    // 四项：营销 mktBps / 销毁 burnBps / LP lpBps / 分红 distBps
+    // TaxDistributor 内部：
+    //   - burnBps 部分代币直接烧到 0xdead
+    //   - lpBps 部分加流动性
+    //   - marketingBps + dividendBps 部分 swap → BNB → 分别发送
+
+    var distABI = TAX_DISTRIBUTOR_DATA.ABI;
+    var distByte = TAX_DISTRIBUTOR_DATA.BYTECODE;
+
+    var distFactory = new ethers.ContractFactory(distABI, distByte, signer);
+    var distContract = await distFactory.deploy(
+      deployedAddr,           // token（主合约地址）
+      marketingWalletAddr,    // marketingWallet
+      dividendTrackerAddr,    // dividendTracker
+      ROUTER_ADDR,            // router
+      ethers.BigNumber.from(mktBps.toString()),   // marketingBps
+      ethers.BigNumber.from(distBps.toString()),  // dividendBps
+      ethers.BigNumber.from(lpBps.toString())     // lpBps
+    );
+    setModalStatus('⏳ 等待分配合约确认...', '区块确认中', '⏳');
+    await distContract.deployTransaction.wait(1);
+    var taxDistAddr = distContract.address;
+
+    // ═══════════════════════════════════════════
+    //  第三步：设置税费分配合约地址
+    //  主合约在卖出时转发税费代币 → TaxDistributor
+    //  TaxDistributor 收到代币后 swap → BNB → 按四项分配
+    // ═══════════════════════════════════════════
+    setModalStatus('🔗 正在设置税费分配钱包...', '请在钱包中确认第三笔交易', '🔗');
+    var setTx = await tokenContract.setTaxDistributor(taxDistAddr);
+    setModalStatus('⏳ 等待确认...', '区块确认中', '⏳');
+    await setTx.wait(1);
+
+    // ── Success ──
+    closeModal();
+    document.getElementById('deployResult').style.display = 'block';
+    document.getElementById('bscLink').href = 'https://bscscan.com/address/' + deployedAddr;
+    document.getElementById('mintLink').href = 'mint.html?token=' + deployedAddr;
+    document.getElementById('constructorArgs').innerHTML =
+      '<code style="font-size:.72rem;line-height:1.8;word-break:break-all;display:block;color:var(--muted)">' +
+      '✅ 主合约: ' + deployedAddr + '<br>' +
+      '🔧 税费分配: ' + taxDistAddr + '<br>' +
+      '📛 代币: ' + name + ' (' + symbol + ')<br>' +
+      '💰 供应量: ' + supply.toLocaleString() + '<br>' +
+      '🏷 Mint价格: ' + mintCostBNBVal + ' BNB / 次<br>' +
+      '🎯 满额: ' + fillBNBVal + ' BNB (' + Math.floor(fillBNBVal / mintCostBNBVal) + ' 次 Mint)<br>' +
+      '📊 预售占比: ' + presalePct + '% | LP比例: ' + lpPct + '%<br>' +
+      '🧾 买卖税: ' + (buyTaxBps/100) + '% / ' + (sellTaxBps/100) + '%<br>' +
+      '📦 税收分配: 营销' + taxAllocMkt + '% 销毁' + taxAllocBurn + '% LP' + taxAllocLp + '% 分红' + taxAllocDist + '%<br>' +
+      '🏪 营销钱包: ' + marketingWalletAddr + '<br>' +
+      '🎁 分红门槛: ' + (minDividendVal || '无') + (minDividendVal ? ' 个代币' : '') + '<br>' +
+      '🛡 白名单: ' + (whitelistOnly ? '开启' : '关闭') + '<br>' +
+      '🚀 开盘模式: ' + (autoOpenTrading ? '自动开盘' : '手动开盘') + '<br>' +
+      '🤖 分红合约: ' + dividendTrackerAddr +
+      '</code>';
+    document.getElementById('deployResult').scrollIntoView({behavior:'smooth'});
+    document.getElementById('btnLaunch').textContent = '部署成功 ✓';
+    document.getElementById('btnLaunch').disabled = true;
+
+  } catch(e) {
+    closeModal();
+    console.error(e);
+    var raw = e.message || String(e);
+
+    // 判断失败阶段
+    var phaseHint = '';
+    var modalTitle = document.getElementById('modalTitle').textContent;
+    if (modalTitle.indexOf('分配') >= 0 || modalTitle.indexOf('关联') >= 0) {
+      phaseHint = '\n\n⚠️ 主合约已部署成功（' + (deployedAddr || '待查') + '），请手动完成剩余步骤。';
+    }
+
+    var msg = '';
+    var errMap = {
+      '0xaf1ee134': '买入/卖出税率不能超过 25%',
+      '0xeb1967ad': '预设参数无效',
+      '0xe528e11e': 'Mint 单价必须大于 0',
+      '0x94a0c025': '预售占比必须在 1-99 之间',
+      '0xbc1c5436': 'LP比例不能超过 100%',
+      '0xc2c2130c': 'TaxDistributor: BPS 分配总和必须 = 100%',
+      '0x26e57fd5': 'tokensPerMint = 0！供应量太小或满额太大，Solidity 整数除法截断为 0',
+      '0x5c5bdd31': 'Mint 获得 0 代币！tokensPerMint = 0，合约参数有误，需重新部署',
+      '0x05bc57a9': 'setMintPrice: tokensPerMint = 0（供应量太小或满额太大）'
+    };
+    var allHex = (e.data || '') + raw;
+    for (var sel in errMap) {
+      if (allHex.indexOf(sel) >= 0) { msg = errMap[sel]; break; }
+    }
+    if (!msg) {
+      if (raw.indexOf('user rejected') >= 0) msg = '用户在钱包中取消';
+      else if (raw.indexOf('insufficient funds') >= 0) msg = '余额不足';
+      else if (raw.indexOf('execution reverted') >= 0) msg = '交易执行失败 — 请检查所有参数是否填写正确';
+      else if (raw.indexOf('nonce too low') >= 0) msg = 'Nonce 冲突，请刷新页面重试';
+      else if (raw.indexOf('replacement fee') >= 0 || raw.indexOf('underpriced') >= 0) msg = 'Gas 太低，请提高 Gas 设置';
+      else msg = raw.substring(0, 300);
+    }
+    alert('部署失败：' + msg + phaseHint + '\n\n原始错误：' + raw.substring(0, 300));
+    document.getElementById('btnLaunch').textContent = '🚀 立即发射代币';
+    document.getElementById('btnLaunch').disabled = false;
+  }
+}
+</script>
+<script>
+  // 页面加载时强制初始化税收滑块（防止浏览器记住上一次的值）
+  window.addEventListener('DOMContentLoaded', function() {
+    ['taxMktSlider','taxBurnSlider','taxLpSlider','taxDistSlider'].forEach(function(id) {
+      document.getElementById(id).value = 0;
+    });
+    _taxVals = { marketing:0, burn:0, lp:0, distribute:0 };
+    ['taxMktVal','taxBurnVal','taxLpVal','taxDistVal'].forEach(function(id) {
+      document.getElementById(id).textContent = '0';
+    });
+    updateTaxBar();
+    updateTaxRemaining();
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,1267 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SimpleToken — 白名单管理</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:#0a0a0a; --bg2:#111; --bg3:#1a1a1a;
+      --gold:#f5c842; --amber:#ff8c00;
+      --danger:#ef4444; --success:#34d399;
+      --text:#f0ede8; --muted:#888; --border:rgba(255,255,255,.08);
+      --font:'Space Grotesk',system-ui,sans-serif;
+    }
+    body { background:var(--bg); color:var(--text); font-family:var(--font); min-height:100vh; padding:24px 16px; }
+    .container { max-width:640px; margin:0 auto; }
+    h1 { font-size:1.4rem; font-weight:700; color:var(--gold); margin-bottom:6px; }
+    .sub { color:var(--muted); font-size:.82rem; margin-bottom:24px; }
+    .card { background:var(--bg2); border:1px solid var(--border); border-radius:14px; padding:24px; margin-bottom:18px; }
+    .card-title { font-size:.95rem; font-weight:600; color:var(--gold); margin-bottom:14px; }
+    .field { margin-bottom:14px; }
+    .field label { display:block; font-size:.75rem; color:var(--muted); margin-bottom:5px; text-transform:uppercase; letter-spacing:.5px; }
+    .field input, .field textarea { width:100%; background:var(--bg3); border:1px solid var(--border); border-radius:10px; padding:10px 14px; color:var(--text); font-family:var(--font); font-size:.88rem; }
+    .field input:focus, .field textarea:focus { outline:none; border-color:var(--gold); box-shadow:0 0 0 3px rgba(245,200,66,.15); }
+    .field textarea { height:100px; resize:vertical; }
+    .btn { display:inline-flex; align-items:center; gap:7px; padding:10px 22px; border-radius:8px; font-family:var(--font); font-weight:600; font-size:.88rem; cursor:pointer; border:none; transition:all .2s; }
+    .btn-gold { background:linear-gradient(135deg,var(--gold),var(--amber)); color:#0a0a0a; }
+    .btn-gold:hover { transform:translateY(-1px); box-shadow:0 4px 20px rgba(245,200,66,.3); }
+    .btn-outline { background:transparent; color:var(--text); border:1px solid rgba(255,255,255,.15); }
+    .btn-outline:hover { border-color:var(--gold); color:var(--gold); }
+    .btn:disabled { opacity:.4; cursor:not-allowed; transform:none!important; }
+    .status { margin-top:12px; font-size:.8rem; padding:8px 12px; border-radius:8px; display:none; }
+    .status.ok { display:block; background:rgba(52,211,153,.08); border:1px solid rgba(52,211,153,.2); color:var(--success); }
+    .status.err { display:block; background:rgba(239,68,68,.08); border:1px solid rgba(239,68,68,.2); color:var(--danger); }
+    .chip { font-size:.72rem; color:var(--gold); background:rgba(245,200,66,.08); border:1px solid rgba(245,200,66,.2); padding:4px 12px; border-radius:50px; font-family:monospace; margin-top:10px; display:none; }
+    .flex-gap { display:flex; gap:10px; flex-wrap:wrap; }
+  </style>
+</head>
+<body>
+<script src="https://unpkg.com/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+<div class="container">
+  <h1>&#128737; SimpleToken 白名单管理</h1>
+  <div class="sub">连接钱包 &rarr; 输入已部署的 Token 合约地址 &rarr; 管理白名单</div>
+
+  <div class="card">
+    <div class="card-title">&#128376; 连接钱包</div>
+    <button id="btnConnect" class="btn btn-outline" onclick="connectWallet()">连接钱包</button>
+    <div id="walletInfo" class="chip"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">&#128269; 合约地址</div>
+    <div class="field">
+      <label>Token 合约地址（0x...）</label>
+      <input type="text" id="contractAddr" placeholder="0x..." />
+    </div>
+    <button id="btnLoad" class="btn btn-outline" onclick="loadContract()">加载合约</button>
+    <div id="contractStatus" class="status"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">&#10004; 批量添加白名单</div>
+    <div class="field">
+      <label>地址列表（每行一个，或逗号分隔）</label>
+      <textarea id="addAddresses" placeholder="0x1234...&#10;0xabcd...&#10;或 0x1234...,0xabcd..."></textarea>
+      <div style="font-size:.7rem;color:var(--muted);margin-top:4px;">将批量调用 addWhitelist(address[])</div>
+    </div>
+    <button id="btnAdd" class="btn btn-gold" onclick="addWhitelist()">添加白名单</button>
+    <div id="addStatus" class="status"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">&#10134; 移除白名单</div>
+    <div class="field">
+      <label>地址（单个）</label>
+      <input type="text" id="rmAddr" placeholder="0x..." />
+    </div>
+    <button id="btnRrm" class="btn btn-outline" onclick="removeWhitelist()">移除</button>
+    <div id="rmStatus" class="status"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">&#128736; 白名单开关</div>
+    <div class="flex-gap">
+      <button id="btnWOn" class="btn btn-gold" onclick="setWhitelistMode(true)">&#128308; 开启白名单模式</button>
+      <button id="btnWOff" class="btn btn-outline" onclick="setWhitelistMode(false)">关闭白名单模式</button>
+    </div>
+    <div id="wlStatus" class="status"></div>
+  </div>
+
+  <div class="card" style="border:2px solid var(--gold);background:rgba(255,215,0,0.04);">
+    <div class="card-title">🔁 白名单 Mint 次数管理</div>
+    <div class="hint" style="margin-bottom:8px;">白名单模式下，每个钱包只能 Mint 一次。可查看/重置状态。</div>
+
+    <!-- 查看是否已 Mint -->
+    <div style="display:flex;gap:8px;align-items:flex-end;margin-bottom:8px;">
+      <div class="field" style="flex:1;margin-bottom:0;">
+        <label>查询地址是否已 Mint</label>
+        <input type="text" id="checkMintedAddr" placeholder="0x..." style="font-family:var(--monospace);" />
+      </div>
+      <button class="btn btn-outline" onclick="checkHasMinted()" style="margin-bottom:4px;">查询</button>
+    </div>
+    <div id="checkMintedStatus" class="status" style="margin-bottom:8px;"></div>
+
+    <!-- 重置 Mint 状态（批量） -->
+    <div style="margin-top:8px;padding-top:8px;border-top:1px dotted var(--border);">
+      <label style="font-size:.78rem;color:var(--muted);">重置 Mint 状态（批量，每行一个或逗号分隔）</label>
+      <textarea id="resetMintedInput" placeholder="0x1234...&#10;0xabcd...&#10;或 0x1234...,0xabcd..." style="min-height:48px;"></textarea>
+      <div style="font-size:.7rem;color:var(--muted);margin:4px 0 8px;">将批量调用 resetWhitelistMinted(address[])</div>
+      <button id="btnResetMinted" class="btn btn-outline" onclick="resetWhitelistMinted()" style="border-color:var(--danger);color:var(--danger);">🔄 重置选中地址的 Mint 状态</button>
+      <div id="resetMintedStatus" class="status"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">&#128640; 开启交易</div>
+    <div style="font-size:.78rem;color:var(--muted);margin-bottom:12px;">
+      开启后用户可在 PancakeSwap 上自由买卖。此操作<strong style="color:var(--danger)">不可撤销</strong>。
+    </div>
+    <button id="btnEnableTrading" class="btn btn-gold" onclick="enableTrading()">
+      &#9654;&#65039; 开启交易（enableTrading）
+    </button>
+    <div id="tradingStatus" class="status"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">&#128184; 代币合约管理</div>
+    <div class="field">
+      <label>合约 BNB 余额</label>
+      <input type="text" id="contractBalance" readonly placeholder="先加载合约" style="font-family:var(--monospace);" />
+    </div>
+    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+      <button id="btnRefreshBalance" class="btn btn-outline" onclick="refreshBalance()">刷新余额</button>
+      <button id="btnWithdraw" class="btn btn-gold" onclick="withdrawBNB()">提取全部 BNB</button>
+    </div>
+    <div class="hint" style="font-size:.72rem;color:var(--muted);margin-top:8px;">BNB 将转入 platformOwner 地址</div>
+    <div id="withdrawStatus" class="status"></div>
+
+    <div style="margin-top:16px; border-top:1px solid var(--border); padding-top:16px;">
+      <label style="font-weight:600;">🏊 LP 管理（LP 存在合约内）</label>
+      <div class="field" style="margin-top:8px;">
+        <label>合约 LP 余额</label>
+        <input type="text" id="lpBalance" readonly placeholder="先加载合约" style="font-family:var(--monospace);" />
+      </div>
+      <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <button id="btnWithdrawLP" class="btn btn-outline" onclick="withdrawLP()">📤 提取 LP 到钱包</button>
+        <button id="btnRemoveLiq" class="btn btn-outline" onclick="removeLiquidity()" style="border-color:var(--danger);color:var(--danger);">🔥 撤除底池</button>
+      </div>
+      <div class="hint" style="font-size:.72rem;color:var(--muted);margin-top:8px;">提取 LP：仅转移 LP 代币，底池不变 | 撤除底池：销毁 LP，取回代币+BNB</div>
+      <div id="lpStatus" class="status"></div>
+
+      <div style="margin-top:12px; padding-top:12px; border-top:1px dashed var(--border);">
+        <label style="font-weight:600;font-size:.88rem;">🪙 提取任意 ERC20 代币（意外转入等）</label>
+        <div class="field" style="margin-top:6px;">
+          <label>代币地址</label>
+          <input type="text" id="rescueTokenAddr" placeholder="0x..." style="font-family:var(--monospace);" />
+        </div>
+        <div class="field">
+          <label>数量（0 = 全部）</label>
+          <input type="text" id="rescueTokenAmt" placeholder="留空=全部" />
+        </div>
+        <button id="btnRescueToken" class="btn btn-outline" onclick="rescueToken()">🚑 提取该代币</button>
+        <div class="hint" style="font-size:.72rem;color:var(--muted);margin-top:6px;">可提取任何意外转入合约的 ERC20 代币。填 0 或留空则自动提取全部余额。</div>
+        <div id="rescueStatus" class="status"></div>
+      </div>
+    </div>
+
+    <div style="margin-top:16px; border-top:1px solid var(--border); padding-top:16px;">
+      <button id="btnRenounce" class="btn btn-outline" onclick="renounceOwnership()" style="border-color:var(--danger);color:var(--danger);">☠️ 丢弃 Owner 权限（不可逆）</button>
+      <div style="font-size:.72rem;color:var(--danger);margin-top:6px;">⚠️ 执行后 owner 永久归零，所有 onlyOwner 函数（白名单/税率等）将永久锁定！platformOwner 仍可操作 enableTrading / 提币</div>
+      <div id="renounceStatus" class="status"></div>
+    </div>
+  <div class="card">
+    <div class="card-title">&#127873; 分红合约管理</div>
+    <div class="field">
+      <label>分红合约地址（DividendDistributor）</label>
+      <input type="text" id="distributorAddr" placeholder="0x..." />
+    </div>
+    <button id="btnLoadDist" class="btn btn-outline" onclick="loadDistributor()">加载分红合约</button>
+    <div id="distStatus" class="status"></div>
+    <div id="divOwnerInfo" style="font-size:.78rem;color:var(--muted);margin-top:6px;"></div>
+
+    <div style="margin-top:16px;">
+      <div class="field">
+        <label>最低持币分红门槛（代币个数，0 = 无门槛）</label>
+        <input type="number" id="minDivInput" placeholder="0" step="any" min="0" value="0" />
+        <div class="hint" style="font-size:.72rem;color:var(--muted);margin-top:4px;">当前值：<span id="curMinDiv">--</span></div>
+      </div>
+      <button id="btnSetMinDiv" class="btn btn-gold" onclick="setMinDividend()" disabled>设置最低门槛</button>
+      <div id="minDivStatus" class="status"></div>
+    </div>
+
+    <div style="margin-top:16px; border-top:1px solid var(--border); padding-top:16px;">
+      <div class="field">
+        <label>分红池状态</label>
+        <div id="distPoolInfo" style="font-size:.82rem;color:var(--muted);">加载分红合约后显示</div>
+      </div>
+      <button id="btnTriggerDiv" class="btn btn-gold" onclick="triggerDistribute()" disabled>💸 触发分红</button>
+      <div id="triggerStatus" class="status"></div>
+
+      <div style="margin-top:12px; border-top:1px solid var(--border); padding-top:12px;">
+        <button id="btnWithdrawDivBNB" class="btn btn-outline" onclick="withdrawDivBNB()" disabled>🔴 提取分红合约全部 BNB</button>
+        <div style="font-size:.72rem;color:var(--danger);margin-top:6px;">⚠️ 危险操作：将清空分红合约中所有待领取的 BNB，转给 ADMIN</div>
+        <div id="divWithdrawStatus" class="status"></div>
+      </div>
+
+      <div style="margin-top:16px; border-top:1px solid var(--border); padding-top:16px;">
+        <div class="card-title" style="font-size:.88rem; margin-bottom:10px;">�个位数 救援误转入的代币</div>
+        <div class="field">
+          <label>代币合约地址（误转入的代币）</label>
+          <input type="text" id="rescueTokenAddr" placeholder="0x..." />
+        </div>
+        <div class="field">
+          <label>合约中该代币余额</label>
+          <input type="text" id="rescueTokenBalance" readonly placeholder="点击查询" style="font-family:var(--monospace);" />
+        </div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+          <button id="btnCheckRescueToken" class="btn btn-outline" onclick="checkRescueToken()" disabled>查询余额</button>
+          <button id="btnRescueToken" class="btn btn-gold" onclick="rescueToken()" disabled>🪄 提取全部代币</button>
+        </div>
+        <div style="font-size:.72rem;color:var(--muted);margin-top:6px;">将提取分红合约中误转入的其他代币到 platformOwner 地址</div>
+        <div id="rescueTokenStatus" class="status"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🔗 关联税费分配合约</div>
+    <div class="hint">部署 TaxDistributor 后，需要调用此函数将主合约与分配合约关联。会自动设置税费豁免。</div>
+    <div class="field" style="margin-top:8px;">
+      <label>TaxDistributor 合约地址</label>
+      <input type="text" id="linkTaxAddr" placeholder="0x..." />
+    </div>
+    <button id="btnLinkTax" class="btn btn-gold" onclick="linkTaxDistributor()" disabled>关联合约</button>
+    <div id="linkTaxStatus" class="status"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">💰 税费分配合约管理</div>
+    <div class="field">
+      <label>税费分配合约地址（TaxDistributor）</label>
+      <input type="text" id="taxAddr" placeholder="0x..." />
+    </div>
+    <button id="btnLoadTax" class="btn btn-outline" onclick="loadTaxDistributor()">加载税费合约</button>
+    <div id="taxStatus" class="status"></div>
+
+    <!-- 合约状态 -->
+    <div id="taxInfo" style="display:none; margin-top:14px; padding-top:14px; border-top:1px solid var(--border);">
+      <div style="font-size:.78rem;color:var(--muted);margin-bottom:8px;" id="taxInfoText">--</div>
+
+      <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
+        <button id="btnTryProcess" class="btn btn-gold" onclick="taxTryProcess()" disabled>
+          🔄 手动处理税费（tryProcess）
+        </button>
+        <button id="btnForceProcess" class="btn btn-outline" onclick="taxForceProcess()" disabled>
+          ⚡ 强制处理（forceProcess - owner）
+        </button>
+      </div>
+      <div id="taxProcessStatus" class="status"></div>
+
+      <!-- BPS 设置 -->
+      <div style="margin-top:14px; padding-top:14px; border-top:1px dashed var(--border);">
+        <label style="font-weight:600;font-size:.88rem;">⚙️ BPS 分配比例（sum ≤ 10000）</label>
+        <div style="display:flex; gap:10px; margin-top:8px;">
+          <div class="field" style="flex:1;"><label>营销 BPS</label><input type="number" id="taxMktBps" min="0" max="10000" step="10" value="0" /></div>
+          <div class="field" style="flex:1;"><label>分红 BPS</label><input type="number" id="taxDivBps" min="0" max="10000" step="10" value="0" /></div>
+          <div class="field" style="flex:1;"><label>LP BPS</label><input type="number" id="taxLpBps" min="0" max="10000" step="10" value="0" /></div>
+        </div>
+        <button id="btnSetBps" class="btn btn-gold" onclick="taxSetBps()" disabled>保存 BPS</button>
+        <div id="taxBpsStatus" class="status"></div>
+      </div>
+
+      <!-- 其他设置 -->
+      <div style="margin-top:14px; padding-top:14px; border-top:1px dashed var(--border);">
+        <div class="field">
+          <label>最低处理额度（代币数量，少于这个不 swap）</label>
+          <input type="number" id="taxMinAmt" step="any" min="0" placeholder="留空不修改" />
+        </div>
+        <div class="flex-gap">
+          <button id="btnSetMinAmt" class="btn btn-outline" onclick="taxSetMinAmt()" disabled>保存最低额度</button>
+          <button id="btnToggleAuto" class="btn btn-outline" onclick="taxToggleAuto()" disabled>自动处理：--</button>
+        </div>
+        <div id="taxSettingsStatus" class="status"></div>
+      </div>
+
+      <!-- 救援 -->
+      <div style="margin-top:14px; padding-top:14px; border-top:1px dashed var(--border);">
+        <label style="font-weight:600;font-size:.88rem;">🚑 救援提取</label>
+        <div style="font-size:.72rem;color:var(--muted);margin-bottom:8px;">提取税费合约中滞留的 BNB / 代币 / LP 到指定钱包（仅 owner）</div>
+
+        <!-- 目标钱包 -->
+        <div class="field" style="margin-bottom:6px;">
+          <label style="font-weight:700;color:var(--gold);font-size:.82rem;">📥 接收钱包地址（留空 = owner，即你本人）</label>
+          <input type="text" id="taxRescueTo" placeholder="0xAbCdEf... 填了地址就提到该钱包" style="font-family:var(--monospace);font-size:.82rem;padding:10px 12px;border:2px solid var(--gold);background:rgba(255,215,0,0.06);" oninput="_taxRescueTo()" />
+          <div id="taxRescueToHint" style="font-size:.7rem;color:var(--muted);margin-top:2px;">⚠️ 当前未填写 → 默认提到 owner 钱包</div>
+        </div>
+
+        <!-- BNB 提取 -->
+        <div class="flex-gap" style="align-items:flex-end;margin-bottom:6px;">
+          <div class="field" style="flex:1;margin-bottom:0;">
+            <label>BNB 数量（留空 = 全部）</label>
+            <input type="text" id="taxRescueBnbAmt" placeholder="留空=全部" />
+          </div>
+          <button id="btnTaxRescueBNB" class="btn btn-outline" onclick="taxRescueBNB()" disabled>💰 提取 BNB</button>
+        </div>
+
+        <!-- 本币提取 -->
+        <div class="flex-gap" style="align-items:flex-end;margin-bottom:6px;">
+          <div class="field" style="flex:1;margin-bottom:0;">
+            <label>本币数量（留空 = 超出阈值部分）</label>
+            <input type="text" id="taxRescueTokenAmt" placeholder="留空=超出阈值" />
+          </div>
+          <button id="btnTaxRescueToken" class="btn btn-outline" onclick="taxRescueToken()" disabled>🪙 提取本币</button>
+        </div>
+
+        <!-- 任意代币提取 -->
+        <div style="margin-top:6px; padding-top:8px; border-top:1px dotted var(--border);">
+          <label style="font-size:.78rem;color:var(--muted);">🪙 提取任意 ERC20 代币（意外转入等）</label>
+          <div class="field" style="margin-bottom:4px;">
+            <input type="text" id="taxRescueAnyAddr" placeholder="代币合约地址 0x..." style="font-family:var(--monospace);" />
+          </div>
+          <div class="field" style="margin-bottom:6px;">
+            <input type="text" id="taxRescueAnyAmt" placeholder="留空=全部" />
+          </div>
+          <button id="btnTaxRescueAny" class="btn btn-outline" onclick="taxRescueAnyToken()" disabled>🚑 提取该代币</button>
+        </div>
+
+        <!-- LP 提取 -->
+        <div style="margin-top:6px; padding-top:8px; border-top:1px dotted var(--border);">
+          <label style="font-size:.78rem;color:var(--muted);">💧 提取 LP 代币</label>
+          <div class="flex-gap" style="align-items:flex-end;">
+            <div class="field" style="flex:1;margin-bottom:0;">
+              <input type="text" id="taxRescueLPAddr" placeholder="LP Token 合约地址 0x..." style="font-family:var(--monospace);" />
+            </div>
+            <button id="btnTaxRescueLP" class="btn btn-outline" onclick="taxRescueLP()" disabled>📤 提取 LP</button>
+          </div>
+        </div>
+
+        <div id="taxRescueStatus" class="status"></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+<script src="contract_data.js?v=202606101905"></script>
+<script src="distributor_data.js?v=202606101905"></script>
+<script src="tax_distributor_data.js?v=202606101905"></script>
+<script>
+  var signer, userAddr, contract = null, distContract = null, taxContract = null;
+
+  async function connectWallet() {
+    if (!window.ethereum) { alert('请安装 MetaMask！'); return; }
+    try {
+      await window.ethereum.request({ method: 'eth_requestAccounts' });
+      var provider = new ethers.providers.Web3Provider(window.ethereum);
+      signer   = provider.getSigner();
+      userAddr = await signer.getAddress();
+      var chip = document.getElementById('walletInfo');
+      chip.textContent = '已连接：' + userAddr.slice(0,6) + '...' + userAddr.slice(-4);
+      chip.style.display = 'inline-block';
+      document.getElementById('btnConnect').textContent = '已连接';
+      document.getElementById('btnConnect').disabled = true;
+    } catch(e) { console.error(e); alert('连接钱包失败：' + e.message); }
+  }
+
+  async function loadContract() {
+    if (!signer) { alert('请先连接钱包！'); return; }
+    var addr = document.getElementById('contractAddr').value.trim();
+    if (!addr) { alert('请输入合约地址！'); return; }
+    try {
+      contract = new ethers.Contract(addr, CONTRACT_DATA.ABI, signer);
+      await contract.owner();
+      var s = document.getElementById('contractStatus');
+      s.className = 'status ok';
+      s.textContent = '✅ 合约加载成功！Owner：' + await contract.owner();
+      document.getElementById('btnTriggerDiv').disabled = false;
+      document.getElementById('btnLinkTax').disabled = false;
+      refreshBalance();
+      checkTradingStatus();
+    } catch(e) {
+      var s2 = document.getElementById('contractStatus');
+      s2.className = 'status err';
+      s2.textContent = '❌ 加载失败：' + e.message;
+    }
+  }
+
+  async function addWhitelist() {
+    if (!contract) { alert('请先加载合约！'); return; }
+    var raw = document.getElementById('addAddresses').value.trim();
+    if (!raw) { alert('请输入地址！'); return; }
+    var addrs = raw.split(/[\n,\s]+/).map(function(a) { return a.trim(); }).filter(function(a) { return a.length > 0; });
+    if (addrs.length === 0) { alert('没有有效地址！'); return; }
+    try {
+      document.getElementById('btnAdd').disabled = true;
+      var tx = await contract.addWhitelist(addrs);
+      await tx.wait(1);
+      var s = document.getElementById('addStatus');
+      s.className = 'status ok';
+      s.textContent = '✅ 已添加 ' + addrs.length + ' 个地址到白名单';
+      document.getElementById('addAddresses').value = '';
+    } catch(e) {
+      var s2 = document.getElementById('addStatus');
+      s2.className = 'status err';
+      s2.textContent = '❌ 失败：' + e.message;
+    } finally { document.getElementById('btnAdd').disabled = false; }
+  }
+
+  async function removeWhitelist() {
+    if (!contract) { alert('请先加载合约！'); return; }
+    var addr = document.getElementById('rmAddr').value.trim();
+    if (!addr) { alert('请输入地址！'); return; }
+    try {
+      document.getElementById('btnRrm').disabled = true;
+      var tx = await contract.removeWhitelist([addr]);
+      await tx.wait(1);
+      var s = document.getElementById('rmStatus');
+      s.className = 'status ok';
+      s.textContent = '✅ 已从白名单移除：' + addr;
+      document.getElementById('rmAddr').value = '';
+    } catch(e) {
+      var s2 = document.getElementById('rmStatus');
+      s2.className = 'status err';
+      s2.textContent = '❌ 失败：' + e.message;
+    } finally { document.getElementById('btnRrm').disabled = false; }
+  }
+
+  async function refreshBalance() {
+    if (!contract) { alert('请先加载合约！'); return; }
+    try {
+      var provider = new ethers.providers.Web3Provider(window.ethereum);
+      var bal = await provider.getBalance(contract.address);
+      var bnb = parseFloat(ethers.utils.formatEther(bal)).toFixed(6);
+      document.getElementById('contractBalance').value = bnb + ' BNB';
+    } catch(e) {
+      document.getElementById('contractBalance').value = '获取失败';
+    }
+    refreshLPBalance();
+  }
+
+  async function withdrawBNB() {
+    if (!contract) { alert('请先加载合约！'); return; }
+    try {
+      var provider = new ethers.providers.Web3Provider(window.ethereum);
+      var bal = await provider.getBalance(contract.address);
+      if (bal.isZero()) { alert('合约内没有 BNB 可提！'); return; }
+      var bnb = parseFloat(ethers.utils.formatEther(bal)).toFixed(6);
+      if (!confirm('确认提取合约中全部 ' + bnb + ' BNB 到 platformOwner 地址？')) return;
+      document.getElementById('btnWithdraw').disabled = true;
+      var tx = await contract.withdrawBNB();
+      await tx.wait(1);
+      var s = document.getElementById('withdrawStatus');
+      s.className = 'status ok';
+      s.textContent = '✅ 已提取 ' + bnb + ' BNB';
+      refreshBalance();
+    } catch(e) {
+      var s2 = document.getElementById('withdrawStatus');
+      s2.className = 'status err';
+      s2.textContent = '❌ 失败：' + e.message;
+    } finally { document.getElementById('btnWithdraw').disabled = false; }
+  }
+
+  async function refreshLPBalance() {
+    if (!contract) { document.getElementById('lpBalance').value = '请先加载合约'; return; }
+    try {
+      var pairAddr = await contract.uniswapV2Pair();
+      if (pairAddr === '0x0000000000000000000000000000000000000000') {
+        document.getElementById('lpBalance').value = '底池未创建';
+        return;
+      }
+      var factoryAbi = ['function getPair(address,address) view returns (address)'];
+      var pairAbi = ['function balanceOf(address) view returns (uint256)'];
+      var provider = new ethers.providers.Web3Provider(window.ethereum);
+      var pair = new ethers.Contract(pairAddr, pairAbi, provider);
+      var bal = await pair.balanceOf(contract.address);
+      var lpStr = ethers.utils.formatEther(bal);
+      document.getElementById('lpBalance').value = lpStr + ' LP';
+    } catch(e) {
+      document.getElementById('lpBalance').value = '获取失败';
+    }
+  }
+
+  async function withdrawLP() {
+    if (!contract) { alert('请先加载合约！'); return; }
+    try {
+      var pairAddr = await contract.uniswapV2Pair();
+      if (pairAddr === '0x0000000000000000000000000000000000000000') { alert('底池未创建！'); return; }
+      var pairAbi = ['function balanceOf(address) view returns (uint256)'];
+      var provider = new ethers.providers.Web3Provider(window.ethereum);
+      var pair = new ethers.Contract(pairAddr, pairAbi, provider);
+      var bal = await pair.balanceOf(contract.address);
+      if (bal.isZero()) { alert('合约内没有 LP 可提！'); return; }
+      var lpStr = parseFloat(ethers.utils.formatEther(bal)).toFixed(6);
+      if (!confirm('确认提取 ' + lpStr + ' LP 代币到 owner 钱包？\n\n此操作仅转移 LP 代币，不会影响底池。')) return;
+      document.getElementById('btnWithdrawLP').disabled = true;
+      var tx = await contract.withdrawLP(bal);
+      await tx.wait(1);
+      var s = document.getElementById('lpStatus');
+      s.className = 'status ok';
+      s.textContent = '✅ 已提取 ' + lpStr + ' LP 到 owner 钱包';
+      refreshLPBalance();
+    } catch(e) {
+      var s2 = document.getElementById('lpStatus');
+      s2.className = 'status err';
+      s2.textContent = '❌ 失败：' + e.message;
+    } finally { document.getElementById('btnWithdrawLP').disabled = false; }
+  }
+
+  async function removeLiquidity() {
+    if (!contract) { alert('请先加载合约！'); return; }
+    try {
+      var pairAddr = await contract.uniswapV2Pair();
+      if (pairAddr === '0x0000000000000000000000000000000000000000') { alert('底池未创建！'); return; }
+      var pairAbi = ['function balanceOf(address) view returns (uint256)'];
+      var provider = new ethers.providers.Web3Provider(window.ethereum);
+      var pair = new ethers.Contract(pairAddr, pairAbi, provider);
+      var bal = await pair.balanceOf(contract.address);
+      if (bal.isZero()) { alert('合约内没有 LP 可撤！'); return; }
+      var lpStr = parseFloat(ethers.utils.formatEther(bal)).toFixed(6);
+      if (!confirm('⚠️ 确认撤除底池？\n\n将销毁 ' + lpStr + ' LP 代币，取回对应的代币和 BNB 到 owner 钱包。\n\n⚠️ 底池流动性将减少！')) return;
+      document.getElementById('btnRemoveLiq').disabled = true;
+      var tx = await contract.removeLiquidity(bal);
+      await tx.wait(1);
+      var s = document.getElementById('lpStatus');
+      s.className = 'status ok';
+      s.textContent = '✅ 已撤除 ' + lpStr + ' LP，代币+BNB 已转回 owner';
+      refreshLPBalance();
+    } catch(e) {
+      var s2 = document.getElementById('lpStatus');
+      s2.className = 'status err';
+      s2.textContent = '❌ 失败：' + e.message;
+    } finally { document.getElementById('btnRemoveLiq').disabled = false; }
+  }
+
+  async function rescueToken() {
+    if (!contract) { alert('请先加载合约！'); return; }
+    try {
+      var tokenAddr = document.getElementById('rescueTokenAddr').value.trim();
+      if (!tokenAddr || tokenAddr.length < 42) { alert('请填写有效的代币地址！'); return; }
+      var amtStr = document.getElementById('rescueTokenAmt').value.trim();
+      var amount;
+      if (!amtStr || amtStr === '0') {
+        // 自动获取该代币的全部余额
+        var tokenAbi = ['function balanceOf(address) view returns (uint256)'];
+        var provider = new ethers.providers.Web3Provider(window.ethereum);
+        var token = new ethers.Contract(tokenAddr, tokenAbi, provider);
+        var bal = await token.balanceOf(contract.address);
+        if (bal.isZero()) { alert('合约内该代币余额为 0，无需提取！'); return; }
+        amount = bal;
+        document.getElementById('rescueTokenAmt').value = ethers.utils.formatEther(bal);
+      } else {
+        amount = ethers.utils.parseEther(amtStr);
+      }
+      var amtStr2 = parseFloat(ethers.utils.formatEther(amount)).toFixed(6);
+      if (!confirm('确认提取 ' + amtStr2 + ' 枚代币\n\n地址：' + tokenAddr + '\n\n→ 发送到 owner 钱包')) return;
+      document.getElementById('btnRescueToken').disabled = true;
+      var tx = await contract.emergencyWithdrawToken(tokenAddr, amount);
+      await tx.wait(1);
+      var s = document.getElementById('rescueStatus');
+      s.className = 'status ok';
+      s.textContent = '✅ 已提取 ' + amtStr2 + ' 枚代币到 owner';
+    } catch(e) {
+      var s2 = document.getElementById('rescueStatus');
+      s2.className = 'status err';
+      s2.textContent = '❌ 失败：' + e.message;
+    } finally { document.getElementById('btnRescueToken').disabled = false; }
+  }
+
+  async function enableTrading() {
+    if (!contract) { alert('请先加载合约！'); return; }
+    try {
+      // 先检查是否已经开启
+      var already = await contract.tradingActive();
+      if (already) {
+        var s = document.getElementById('tradingStatus');
+        s.className = 'status ok';
+        s.textContent = '✅ 交易已开启！（mint 满后自动激活，无需手动操作）';
+        document.getElementById('btnEnableTrading').disabled = true;
+        document.getElementById('btnEnableTrading').textContent = '✅ 交易已开启';
+        return;
+      }
+    } catch(e) { /* tradingActive 读取失败，继续尝试 enableTrading */ }
+
+    if (!confirm('⚠️ 确认开启交易？\n\n此操作不可撤销！开启后用户将可以在 PancakeSwap 上自由买卖代币。')) return;
+    try {
+      document.getElementById('btnEnableTrading').disabled = true;
+      var tx = await contract.enableTrading();
+      var s = document.getElementById('tradingStatus');
+      s.className = 'status ok';
+      s.textContent = '⏳ 交易发送中，等待确认...';
+      await tx.wait(1);
+      s.textContent = '✅ 交易已开启！用户现在可以自由买卖';
+      document.getElementById('btnEnableTrading').textContent = '✅ 交易已开启';
+    } catch(e) {
+      var s2 = document.getElementById('tradingStatus');
+      s2.className = 'status err';
+      s2.textContent = '❌ 失败：' + e.message;
+    } finally { document.getElementById('btnEnableTrading').disabled = false; }
+  }
+
+  async function checkTradingStatus() {
+    if (!contract) return;
+    try {
+      var active = await contract.tradingActive();
+      if (active) {
+        document.getElementById('btnEnableTrading').disabled = true;
+        document.getElementById('btnEnableTrading').textContent = '✅ 交易已开启';
+        var s = document.getElementById('tradingStatus');
+        s.className = 'status ok';
+        s.textContent = '✅ 交易已开启（mint 满后自动激活）';
+      }
+    } catch(e) {}
+  }
+
+  async function setWhitelistMode(on) {
+    if (!contract) { alert('请先加载合约！'); return; }
+    try {
+      var btn = on ? document.getElementById('btnWOn') : document.getElementById('btnWOff');
+      btn.disabled = true;
+      var tx = await contract.setWhitelistMintOnly(on);
+      await tx.wait(1);
+      var s = document.getElementById('wlStatus');
+      s.className = 'status ok';
+      s.textContent = '✅ 白名单模式：' + (on ? '已开启' : '已关闭');
+    } catch(e) {
+      var s2 = document.getElementById('wlStatus');
+      s2.className = 'status err';
+      s2.textContent = '❌ 失败：' + e.message;
+    } finally {
+      document.getElementById('btnWOn').disabled = false;
+      document.getElementById('btnWOff').disabled = false;
+    }
+  }
+
+  /* ── 白名单 Mint 次数管理 ── */
+  async function checkHasMinted() {
+    if (!contract) { alert('请先加载合约！'); return; }
+    var addr = document.getElementById('checkMintedAddr').value.trim();
+    if (!ethers.utils.isAddress(addr)) { alert('请输入有效的地址！'); return; }
+    try {
+      var minted = await contract.hasMinted(addr);
+      var s = document.getElementById('checkMintedStatus');
+      if (minted) {
+        s.className = 'status err';
+        s.textContent = '✅ 该地址已 Mint 过（不能再 Mint）';
+      } else {
+        s.className = 'status ok';
+        s.textContent = '⚪ 该地址尚未 Mint（可以 Mint）';
+      }
+    } catch(e) {
+      document.getElementById('checkMintedStatus').className = 'status err';
+      document.getElementById('checkMintedStatus').textContent = '❌ 查询失败：' + (e.message || e);
+    }
+  }
+
+  async function resetWhitelistMinted() {
+    if (!contract) { alert('请先加载合约！'); return; }
+    var raw = document.getElementById('resetMintedInput').value.trim();
+    if (!raw) { alert('请输入要重置的地址！'); return; }
+    var addrs = raw.split(/[\n,\s;]+/).map(s=>s.trim()).filter(Boolean);
+    addrs = [...new Set(addrs)];
+    if (addrs.length === 0) { alert('没有有效地址！'); return; }
+    if (!confirm('确认重置以下 ' + addrs.length + ' 个地址的 Mint 状态？\n（重置后这些地址可以再次 Mint）\n\n' + addrs.slice(0,5).join('\n') + (addrs.length > 5 ? '\n...等共 ' + addrs.length + ' 个' : ''))) return;
+    try {
+      document.getElementById('btnResetMinted').disabled = true;
+      var tx = await contract.resetWhitelistMinted(addrs);
+      var s = document.getElementById('resetMintedStatus');
+      s.className = 'status';
+      s.textContent = '⏳ 等待确认...';
+      await tx.wait(1);
+      s.className = 'status ok';
+      s.textContent = '✅ 已重置 ' + addrs.length + ' 个地址的 Mint 状态';
+      document.getElementById('resetMintedInput').value = '';
+    } catch(e) {
+      var s2 = document.getElementById('resetMintedStatus');
+      s2.className = 'status err';
+      s2.textContent = '❌ 失败：' + (e.message || e);
+    } finally {
+      document.getElementById('btnResetMinted').disabled = false;
+    }
+  }
+
+  /* ── 分红合约管理（兼容旧版合约） ── */
+  async function loadDistributor() {
+    if (!signer) { alert('请先连接钱包！'); return; }
+    var addr = document.getElementById('distributorAddr').value.trim();
+    if (!addr) { alert('请输入分红合约地址！'); return; }
+    try {
+      distContract = new ethers.Contract(addr, DISTRIBUTOR_DATA.ABI, signer);
+      document.getElementById('btnTriggerDiv').disabled = false;
+      // platformOwner（所有版本都有）
+      var ownerAddr = await distContract.platformOwner();
+      var isOwner = (userAddr.toLowerCase() === ownerAddr.toLowerCase());
+      // minDividendBalance（新版才有，旧版会 revert）
+      var isNewVersion = true;
+      try {
+        var minDiv = await distContract.minDividendBalance();
+        document.getElementById('curMinDiv').textContent = parseFloat(ethers.utils.formatEther(minDiv)).toLocaleString() + ' 个';
+        document.getElementById('btnSetMinDiv').disabled = false;
+      } catch(_minErr) {
+        isNewVersion = false;
+        document.getElementById('curMinDiv').textContent = '0 个（旧版不支持）';
+        document.getElementById('btnSetMinDiv').disabled = true;
+      }
+      document.getElementById('btnWithdrawDivBNB').disabled = !isOwner;
+      document.getElementById('btnCheckRescueToken').disabled = !isOwner;
+      document.getElementById('divOwnerInfo').innerHTML =
+        'PlatformOwner: <b>' + ownerAddr.slice(0,6) + '...' + ownerAddr.slice(-4) + '</b>' +
+        (isOwner ? ' ✅ 当前钱包' : ' ⚠️ 当前钱包不是 Owner，无法提 BNB') +
+        ' &nbsp;|&nbsp; 版本：<b>' + (isNewVersion ? '新版' : '旧版（部分功能不可用）') + '</b>';
+      await tryRefreshDistPool();
+      var s = document.getElementById('distStatus');
+      s.className = 'status ok';
+      s.textContent = '✅ 分红合约加载成功';
+    } catch(e) {
+      var s2 = document.getElementById('distStatus');
+      s2.className = 'status err';
+      s2.textContent = '❌ 加载失败：' + e.message;
+    }
+  }
+
+  async function tryRefreshDistPool() {
+    if (!distContract || !contract) return;
+    try {
+      var tokenBal = await contract.balanceOf(distContract.address);
+      var tokenDec = ethers.utils.formatEther(tokenBal);
+      var info = '📊 积攒代币：<b>' + parseFloat(tokenDec).toLocaleString(undefined,{maximumFractionDigits:2}) + '</b> 个';
+      try {
+        var holdersCount = await distContract.holdersCount();
+        info += ' &nbsp;|&nbsp; 👥 分红人数：<b>' + holdersCount + '</b>';
+      } catch(_h) { info += ' &nbsp;|&nbsp; 👥 分红人数：加载分红合约后显示'; }
+      document.getElementById('distPoolInfo').innerHTML = info;
+    } catch(e) {
+      document.getElementById('distPoolInfo').textContent = '⚠️ 获取状态失败（请先加载代币合约和分红合约）';
+    }
+  }
+
+  async function refreshDistPool() {
+    if (!distContract || !contract) return;
+    try {
+      var tokenBal = await contract.balanceOf(distContract.address);
+      var tokenDec = ethers.utils.formatEther(tokenBal);
+      var info = '📊 积攒代币：<b>' + parseFloat(tokenDec).toLocaleString(undefined,{maximumFractionDigits:2}) + '</b> 个';
+      try {
+        var holdersCount = await distContract.holdersCount();
+        info += ' &nbsp;|&nbsp; 👥 分红人数：<b>' + holdersCount + '</b>';
+      } catch(_h) {}
+      document.getElementById('distPoolInfo').innerHTML = info;
+    } catch(e) {
+      document.getElementById('distPoolInfo').textContent = '⚠️ 获取状态失败';
+    }
+  }
+
+  async function triggerDistribute() {
+    if (!contract) { alert('请先加载代币合约！'); return; }
+    try {
+      document.getElementById('btnTriggerDiv').disabled = true;
+      var s = document.getElementById('triggerStatus');
+      s.className = 'status ok';
+      s.textContent = '⏳ 正在 swap 分红代币 → BNB → 发送到分红合约...';
+      var tx = await contract.swapAndDistributeDividend();
+      await tx.wait(1);
+      s.textContent = '✅ 分红 swap 完成！BNB 已发送到分红合约并自动分配';
+      await refreshDistPool();
+    } catch(e) {
+      var s2 = document.getElementById('triggerStatus');
+      s2.className = 'status err';
+      s2.textContent = '❌ 失败：' + e.message;
+    } finally { document.getElementById('btnTriggerDiv').disabled = false; }
+  }
+
+  async function setMinDividend() {
+    if (!distContract) { alert('请先加载分红合约！'); return; }
+    var val = parseFloat(document.getElementById('minDivInput').value) || 0;
+    var wei = ethers.utils.parseEther(val.toString());
+    try {
+      document.getElementById('btnSetMinDiv').disabled = true;
+      var tx = await distContract.setMinDividendBalance(wei);
+      var s = document.getElementById('minDivStatus');
+      s.className = 'status ok';
+      s.textContent = '⏳ 交易发送中，等待确认...';
+      await tx.wait(1);
+      s.textContent = '✅ 最低持币门槛已设为 ' + val.toLocaleString() + ' 个';
+      document.getElementById('curMinDiv').textContent = val.toLocaleString() + ' 个';
+    } catch(e) {
+      var s2 = document.getElementById('minDivStatus');
+      s2.className = 'status err';
+      s2.textContent = '❌ 失败：' + e.message;
+    } finally { document.getElementById('btnSetMinDiv').disabled = false; }
+  }
+
+  async function withdrawDivBNB() {
+    if (!distContract) { alert('请先加载分红合约！'); return; }
+    try {
+      var provider = new ethers.providers.Web3Provider(window.ethereum);
+      var bal = await provider.getBalance(distContract.address);
+      if (bal.isZero()) { alert('分红合约内没有 BNB 可提！'); return; }
+      var bnb = parseFloat(ethers.utils.formatEther(bal)).toFixed(6);
+      if (!confirm('⚠️ 危险操作！确认提取分红合约中全部 ' + bnb + ' BNB 到 ADMIN 地址？\n\n此操作将清空所有待领取的分红 BNB！')) return;
+      document.getElementById('btnWithdrawDivBNB').disabled = true;
+      // 先尝试新版 withdrawBNB()（无参数），报错则回退旧版 withdrawStuckBNB(address to)
+      var tx;
+      try {
+        tx = await distContract.withdrawBNB();
+      } catch(_err1) {
+        tx = await distContract.withdrawStuckBNB(userAddr);
+      }
+      await tx.wait(1);
+      var s = document.getElementById('divWithdrawStatus');
+      s.className = 'status ok';
+      s.textContent = '✅ 已提取 ' + bnb + ' BNB';
+    } catch(e) {
+      var s2 = document.getElementById('divWithdrawStatus');
+      s2.className = 'status err';
+      s2.textContent = '❌ 失败：' + e.message;
+    } finally { document.getElementById('btnWithdrawDivBNB').disabled = false; }
+  }
+
+  /* ── 关联主合约与税费分配合约 ── */
+  async function linkTaxDistributor() {
+    if (!contract) { alert('请先加载主合约！'); return; }
+    var taxAddr = document.getElementById('linkTaxAddr').value.trim();
+    if (!taxAddr || !taxAddr.startsWith('0x') || taxAddr.length !== 42) {
+      alert('请输入有效的 TaxDistributor 地址（42位 0x 开头）');
+      return;
+    }
+    try {
+      var btn = document.getElementById('btnLinkTax');
+      btn.disabled = true;
+      btn.textContent = '⏳ 交易进行中...';
+      var tx = await contract.setTaxDistributor(taxAddr);
+      var s = document.getElementById('linkTaxStatus');
+      s.className = 'status';
+      s.textContent = '⏳ 等待确认...';
+      await tx.wait(1);
+      s.className = 'status ok';
+      s.textContent = '✅ 已关联！TaxDistributor: ' + taxAddr;
+      document.getElementById('linkTaxAddr').value = '';
+    } catch(e) {
+      var s2 = document.getElementById('linkTaxStatus');
+      s2.className = 'status err';
+      s2.textContent = '❌ 失败：' + (e.message || e);
+    } finally {
+      document.getElementById('btnLinkTax').disabled = false;
+      document.getElementById('btnLinkTax').textContent = '关联合约';
+    }
+  }
+
+  /* ── 税费分配合约管理 ── */
+  async function loadTaxDistributor() {
+    if (!signer) { alert('请先连接钱包！'); return; }
+    var addr = document.getElementById('taxAddr').value.trim();
+    if (!addr) { alert('请输入税费分配合约地址！'); return; }
+    try {
+      taxContract = new ethers.Contract(addr, TAX_DISTRIBUTOR_DATA.ABI, signer);
+      // 验证合约存在
+      var ownerAddr = await taxContract.owner();
+      var isOwner = (userAddr.toLowerCase() === ownerAddr.toLowerCase());
+      // 获取状态
+      var status = await taxContract.getStatus();
+      var bal = parseFloat(ethers.utils.formatEther(status.balance_)).toLocaleString(undefined,{maximumFractionDigits:2});
+      var minAmt = parseFloat(ethers.utils.formatEther(status.minProcessAmount_)).toLocaleString(undefined,{maximumFractionDigits:2});
+      var lastFail = status.lastFailure_ || '(无)';
+      var auto = status.autoProcess_;
+      var info = '📊 合约余额：<b>' + bal + '</b> 代币 &nbsp;|&nbsp; 最低门槛：<b>' + minAmt + '</b>';
+      info += '<br>⚙️ 营销：<b>' + status.marketingBps_ + '</b> &nbsp; 分红：<b>' + status.dividendBps_ + '</b> &nbsp; LP：<b>' + status.lpBps_ + '</b>';
+      info += '<br>🤖 自动处理：<b>' + (auto ? '✅ 开启' : '❌ 关闭') + '</b>';
+      info += '<br>🕐 上次失败原因：<span style="color:var(--danger)">' + lastFail + '</span>';
+      info += '<br>👤 Owner：<b>' + ownerAddr.slice(0,6) + '...' + ownerAddr.slice(-4) + '</b> ' + (isOwner ? '✅' : '⚠️');
+      document.getElementById('taxInfoText').innerHTML = info;
+      document.getElementById('taxInfo').style.display = 'block';
+      // 填充 BPS 输入框
+      document.getElementById('taxMktBps').value = status.marketingBps_.toString();
+      document.getElementById('taxDivBps').value = status.dividendBps_.toString();
+      document.getElementById('taxLpBps').value = status.lpBps_.toString();
+      // 按钮状态
+      document.getElementById('btnTryProcess').disabled = false;
+      document.getElementById('btnForceProcess').disabled = !isOwner;
+      document.getElementById('btnSetBps').disabled = !isOwner;
+      document.getElementById('btnSetMinAmt').disabled = !isOwner;
+      document.getElementById('btnToggleAuto').disabled = !isOwner;
+      document.getElementById('btnToggleAuto').textContent = '自动处理：' + (auto ? '✅ 关闭' : '❌ 开启');
+      document.getElementById('btnTaxRescueBNB').disabled = !isOwner;
+      document.getElementById('btnTaxRescueToken').disabled = !isOwner;
+      document.getElementById('btnTaxRescueAny').disabled = !isOwner;
+      document.getElementById('btnTaxRescueLP').disabled = !isOwner;
+      var s = document.getElementById('taxStatus');
+      s.className = 'status ok';
+      s.textContent = '✅ 税费合约加载成功';
+    } catch(e) {
+      var s2 = document.getElementById('taxStatus');
+      s2.className = 'status err';
+      s2.textContent = '❌ 加载失败：' + e.message;
+    }
+  }
+
+  async function refreshTaxStatus() {
+    if (!taxContract) return;
+    try {
+      var status = await taxContract.getStatus();
+      var bal = parseFloat(ethers.utils.formatEther(status.balance_)).toLocaleString(undefined,{maximumFractionDigits:2});
+      var lastFail = status.lastFailure_ || '(无)';
+      var auto = status.autoProcess_;
+      var info = '📊 合约余额：<b>' + bal + '</b> 代币';
+      info += '<br>🤖 自动处理：<b>' + (auto ? '✅ 开启' : '❌ 关闭') + '</b>';
+      info += '<br>🕐 上次失败原因：<span style="color:var(--danger)">' + lastFail + '</span>';
+      document.getElementById('taxInfoText').innerHTML = info;
+      document.getElementById('btnToggleAuto').textContent = '自动处理：' + (auto ? '✅ 关闭' : '❌ 开启');
+    } catch(e) {}
+  }
+
+  async function taxTryProcess() {
+    if (!taxContract) { alert('请先加载税费合约！'); return; }
+    try {
+      document.getElementById('btnTryProcess').disabled = true;
+      var s = document.getElementById('taxProcessStatus');
+      s.className = 'status ok';
+      s.textContent = '⏳ 正在处理税费（tryProcess）...';
+      var tx = await taxContract.tryProcess({gasLimit: 2000000});
+      await tx.wait(1);
+      s.textContent = '✅ 处理完成！请刷新状态查看结果';
+      await refreshTaxStatus();
+    } catch(e) {
+      var s2 = document.getElementById('taxProcessStatus');
+      s2.className = 'status err';
+      s2.textContent = '❌ 失败：' + e.message;
+    } finally { document.getElementById('btnTryProcess').disabled = false; }
+  }
+
+  async function taxForceProcess() {
+    if (!taxContract) { alert('请先加载税费合约！'); return; }
+    try {
+      document.getElementById('btnForceProcess').disabled = true;
+      var s = document.getElementById('taxProcessStatus');
+      s.className = 'status ok';
+      s.textContent = '⏳ 强制处理中（forceProcess）...';
+      var tx = await taxContract.forceProcess({gasLimit: 2000000});
+      await tx.wait(1);
+      s.textContent = '✅ 强制处理完成！';
+      await refreshTaxStatus();
+    } catch(e) {
+      var s2 = document.getElementById('taxProcessStatus');
+      s2.className = 'status err';
+      s2.textContent = '❌ 失败：' + e.message;
+    } finally { document.getElementById('btnForceProcess').disabled = false; }
+  }
+
+  async function taxSetBps() {
+    if (!taxContract) { alert('请先加载税费合约！'); return; }
+    var mkt = parseInt(document.getElementById('taxMktBps').value) || 0;
+    var div = parseInt(document.getElementById('taxDivBps').value) || 0;
+    var lp  = parseInt(document.getElementById('taxLpBps').value) || 0;
+    if (mkt + div + lp > 10000) { alert('BPS 总和不能超过 10000！当前总和 = ' + (mkt+div+lp)); return; }
+    try {
+      document.getElementById('btnSetBps').disabled = true;
+      var tx = await taxContract.setBps(mkt, div, lp);
+      var s = document.getElementById('taxBpsStatus');
+      s.className = 'status ok';
+      s.textContent = '⏳ 交易发送中...';
+      await tx.wait(1);
+      s.textContent = '✅ BPS 已更新：营销 ' + mkt + ' | 分红 ' + div + ' | LP ' + lp;
+      await refreshTaxStatus();
+    } catch(e) {
+      var s2 = document.getElementById('taxBpsStatus');
+      s2.className = 'status err';
+      s2.textContent = '❌ 失败：' + e.message;
+    } finally { document.getElementById('btnSetBps').disabled = false; }
+  }
+
+  async function taxSetMinAmt() {
+    if (!taxContract) { alert('请先加载税费合约！'); return; }
+    var amt = document.getElementById('taxMinAmt').value.trim();
+    if (!amt || parseFloat(amt) <= 0) { alert('请输入有效的最低处理额度！'); return; }
+    try {
+      document.getElementById('btnSetMinAmt').disabled = true;
+      var wei = ethers.utils.parseEther(amt);
+      var tx = await taxContract.setMinProcessAmount(wei);
+      var s = document.getElementById('taxSettingsStatus');
+      s.className = 'status ok';
+      s.textContent = '⏳ 交易发送中...';
+      await tx.wait(1);
+      s.textContent = '✅ 最低处理额度已设为 ' + amt + ' 个代币';
+      document.getElementById('taxMinAmt').value = '';
+      await refreshTaxStatus();
+    } catch(e) {
+      var s2 = document.getElementById('taxSettingsStatus');
+      s2.className = 'status err';
+      s2.textContent = '❌ 失败：' + e.message;
+    } finally { document.getElementById('btnSetMinAmt').disabled = false; }
+  }
+
+  async function taxToggleAuto() {
+    if (!taxContract) { alert('请先加载税费合约！'); return; }
+    try {
+      var status = await taxContract.getStatus();
+      var newVal = !status.autoProcess_;
+      document.getElementById('btnToggleAuto').disabled = true;
+      var tx = await taxContract.setAutoProcess(newVal);
+      var s = document.getElementById('taxSettingsStatus');
+      s.className = 'status ok';
+      s.textContent = '⏳ 交易发送中...';
+      await tx.wait(1);
+      s.textContent = '✅ 自动处理已' + (newVal ? '开启' : '关闭');
+      await refreshTaxStatus();
+    } catch(e) {
+      var s2 = document.getElementById('taxSettingsStatus');
+      s2.className = 'status err';
+      s2.textContent = '❌ 失败：' + e.message;
+    } finally { document.getElementById('btnToggleAuto').disabled = false; }
+  }
+
+  function _taxRescueTo() {
+    var v = document.getElementById('taxRescueTo').value.trim();
+    var hint = document.getElementById('taxRescueToHint');
+    if (!v) {
+      hint.textContent = '⚠️ 当前未填写 → 默认提到 owner 钱包（' + (userAddr || '未连接') + '）';
+      hint.style.color = 'var(--muted)';
+      return null;
+    }
+    if (!ethers.utils.isAddress(v)) {
+      hint.textContent = '❌ 地址格式无效！必须是 42 位 0x 开头的地址';
+      hint.style.color = 'var(--danger)';
+      return null;
+    }
+    hint.textContent = '✅ 将提取到：' + v;
+    hint.style.color = 'var(--green)';
+    return v;
+  }
+
+  async function taxRescueBNB() {
+    if (!taxContract) { alert('请先加载税费合约！'); return; }
+    try {
+      var toAddr = _taxRescueTo() || userAddr;
+      if (!ethers.utils.isAddress(toAddr)) { alert('请输入有效的接收钱包地址！'); return; }
+      var amtStr = document.getElementById('taxRescueBnbAmt').value.trim();
+      var provider = new ethers.providers.Web3Provider(window.ethereum);
+      var bal = await provider.getBalance(taxContract.address);
+      if (bal.isZero()) { alert('税费合约内没有 BNB！'); return; }
+
+      var amount;
+      if (!amtStr) {
+        amount = bal;
+        var bnb = parseFloat(ethers.utils.formatEther(bal)).toFixed(6);
+        if (!confirm('确认提取全部 ' + bnb + ' BNB 到 ' + toAddr + ' ？')) return;
+      } else {
+        amount = ethers.utils.parseEther(amtStr);
+        if (amount.gt(bal)) { alert('余额不足！当前余额：' + parseFloat(ethers.utils.formatEther(bal)).toFixed(6) + ' BNB'); return; }
+        if (!confirm('确认提取 ' + amtStr + ' BNB 到 ' + toAddr + ' ？')) return;
+      }
+
+      document.getElementById('btnTaxRescueBNB').disabled = true;
+      var s = document.getElementById('taxRescueStatus');
+      s.className = 'status ok'; s.textContent = '⏳ 交易发送中...';
+      var tx = await taxContract.rescueBNB(toAddr, amount);
+      await tx.wait(1);
+      s.textContent = '✅ 已提取 BNB 到 ' + toAddr;
+    } catch(e) {
+      var s2 = document.getElementById('taxRescueStatus');
+      s2.className = 'status err';
+      s2.textContent = '❌ 失败：' + e.message;
+    } finally { document.getElementById('btnTaxRescueBNB').disabled = false; }
+  }
+
+  async function taxRescueToken() {
+    if (!taxContract || !contract) { alert('请先加载税费合约和代币合约！'); return; }
+    try {
+      var toAddr = _taxRescueTo() || userAddr;
+      if (!ethers.utils.isAddress(toAddr)) { alert('请输入有效的接收钱包地址！'); return; }
+      var amtStr = document.getElementById('taxRescueTokenAmt').value.trim();
+      var tokenBal = await contract.balanceOf(taxContract.address);
+      if (tokenBal.isZero()) { alert('税费合约内没有本币可提！'); return; }
+
+      var amount, descStr;
+      if (!amtStr) {
+        var status = await taxContract.getStatus();
+        var minAmt = status.minProcessAmount_;
+        if (tokenBal.lte(minAmt)) { alert('余额未超过最低处理额度，不建议提取！'); return; }
+        amount = tokenBal.sub(minAmt);
+        descStr = '超出处理额度的 ' + parseFloat(ethers.utils.formatEther(amount)).toFixed(6);
+      } else {
+        amount = ethers.utils.parseEther(amtStr);
+        if (amount.gt(tokenBal)) { alert('余额不足！'); return; }
+        descStr = amtStr;
+      }
+      if (!confirm('确认提取 ' + descStr + ' 个代币到 ' + toAddr + ' ？')) return;
+
+      document.getElementById('btnTaxRescueToken').disabled = true;
+      var s = document.getElementById('taxRescueStatus');
+      s.className = 'status ok'; s.textContent = '⏳ 交易发送中...';
+      // 新签名: rescueToken(address _token, address _to, uint256 _amount)
+      var tx = await taxContract.rescueToken(contract.address, toAddr, amount);
+      await tx.wait(1);
+      s.textContent = '✅ 已提取代币到 ' + toAddr;
+    } catch(e) {
+      var s2 = document.getElementById('taxRescueStatus');
+      s2.className = 'status err';
+      s2.textContent = '❌ 失败：' + e.message;
+    } finally { document.getElementById('btnTaxRescueToken').disabled = false; }
+  }
+
+  async function taxRescueAnyToken() {
+    if (!taxContract) { alert('请先加载税费合约！'); return; }
+    try {
+      var toAddr = _taxRescueTo() || userAddr;
+      if (!ethers.utils.isAddress(toAddr)) { alert('请输入有效的接收钱包地址！'); return; }
+      var tokenAddr = document.getElementById('taxRescueAnyAddr').value.trim();
+      if (!ethers.utils.isAddress(tokenAddr)) { alert('请输入有效的代币地址！'); return; }
+      var amtStr = document.getElementById('taxRescueAnyAmt').value.trim();
+
+      var erc20 = new ethers.Contract(tokenAddr, ['function balanceOf(address) view returns (uint256)','function decimals() view returns (uint8)','function symbol() view returns (string)'], signer);
+      var bal = await erc20.balanceOf(taxContract.address);
+      if (bal.isZero()) { alert('税费合约内该代币余额为 0！'); return; }
+
+      var amount;
+      if (!amtStr) {
+        amount = bal;
+        var dec = await erc20.decimals();
+        var sym = await erc20.symbol();
+        var fmt = parseFloat(ethers.utils.formatUnits(bal, dec)).toFixed(6);
+        if (!confirm('确认提取全部 ' + fmt + ' ' + sym + ' 到 ' + toAddr + ' ？')) return;
+      } else {
+        amount = ethers.utils.parseEther(amtStr);
+        if (amount.gt(bal)) { alert('余额不足！'); return; }
+        if (!confirm('确认提取 ' + amtStr + ' 枚代币到 ' + toAddr + ' ？')) return;
+      }
+
+      document.getElementById('btnTaxRescueAny').disabled = true;
+      var s = document.getElementById('taxRescueStatus');
+      s.className = 'status ok'; s.textContent = '⏳ 交易发送中...';
+      var tx = await taxContract.rescueToken(tokenAddr, toAddr, amount);
+      await tx.wait(1);
+      s.textContent = '✅ 已提取代币到 ' + toAddr;
+    } catch(e) {
+      var s2 = document.getElementById('taxRescueStatus');
+      s2.className = 'status err';
+      s2.textContent = '❌ 失败：' + e.message;
+    } finally { document.getElementById('btnTaxRescueAny').disabled = false; }
+  }
+
+  async function taxRescueLP() {
+    if (!taxContract) { alert('请先加载税费合约！'); return; }
+    try {
+      var toAddr = _taxRescueTo() || userAddr;
+      if (!ethers.utils.isAddress(toAddr)) { alert('请输入有效的接收钱包地址！'); return; }
+      var pairAddr = document.getElementById('taxRescueLPAddr').value.trim();
+      if (!ethers.utils.isAddress(pairAddr)) { alert('请输入有效的 LP Token 地址！'); return; }
+
+      var lp = new ethers.Contract(pairAddr, ['function balanceOf(address) view returns (uint256)','function symbol() view returns (string)'], signer);
+      var bal = await lp.balanceOf(taxContract.address);
+      if (bal.isZero()) { alert('税费合约内 LP 余额为 0！'); return; }
+      var sym = await lp.symbol();
+      var fmt = parseFloat(ethers.utils.formatEther(bal)).toFixed(6);
+
+      if (!confirm('确认提取全部 ' + fmt + ' ' + sym + ' LP 到 ' + toAddr + ' ？\n\n仅转移 LP 代币，不会影响底池。')) return;
+
+      document.getElementById('btnTaxRescueLP').disabled = true;
+      var s = document.getElementById('taxRescueStatus');
+      s.className = 'status ok'; s.textContent = '⏳ 交易发送中...';
+      // 新签名: rescueLP(address _pair, address _to, uint256 _amount)
+      var tx = await taxContract.rescueLP(pairAddr, toAddr, bal);
+      await tx.wait(1);
+      s.textContent = '✅ 已提取 ' + fmt + ' ' + sym + ' LP 到 ' + toAddr;
+    } catch(e) {
+      var s2 = document.getElementById('taxRescueStatus');
+      s2.className = 'status err';
+      s2.textContent = '❌ 失败：' + e.message;
+    } finally { document.getElementById('btnTaxRescueLP').disabled = false; }
+  }
+
+  // ── 丢弃 owner 权限 ──
+  async function renounceOwnership() {
+    if (!contract) { alert('请先加载代币合约！'); return; }
+    if (!confirm('☠️ 确认丢弃 Owner 权限？\n\n' +
+      '此操作不可撤销！执行后：\n' +
+      '• owner 永久归零\n' +
+      '• 白名单管理、税率调整等函数永久锁定\n' +
+      '• platformOwner 仍可调用 enableTrading / withdrawBNB / withdrawStuckToken\n' +
+      '• 分红合约的 platformOwner 不受影响\n\n' +
+      '确认请输入 YES（大写）：')) return;
+    var secondConfirm = prompt('请输入 YES 确认丢弃权限：');
+    if (secondConfirm !== 'YES') { alert('已取消'); return; }
+    try {
+      document.getElementById('btnRenounce').disabled = true;
+      var s = document.getElementById('renounceStatus');
+      s.className = 'status ok';
+      s.textContent = '⏳ 丢弃权限交易发送中...';
+      var tx = await contract.renounceOwnership();
+      await tx.wait(1);
+      s.textContent = '✅ Owner 权限已丢弃！owner = address(0)';
+      s.className = 'status ok';
+    } catch(e) {
+      var s2 = document.getElementById('renounceStatus');
+      s2.className = 'status err';
+      s2.textContent = '❌ 失败：' + e.message;
+    } finally { document.getElementById('btnRenounce').disabled = false; }
+  }
+
+  // ── 救援误转入代币 ──
+  var rescueTokenContract = null;
+  var rescueTokenBalanceWei = '0'; // 保存余额（wei），用于旧合约
+
+  async function checkRescueToken() {
+    if (!distContract) { alert('请先加载分红合约！'); return; }
+    var tokenAddr = document.getElementById('rescueTokenAddr').value.trim();
+    if (!tokenAddr) { alert('请输入代币合约地址！'); return; }
+    try {
+      document.getElementById('btnCheckRescueToken').disabled = true;
+      // 创建临时 ERC20 合约实例（只读，用于查询余额）
+      var abi = ['function balanceOf(address) view returns (uint256)', 'function decimals() view returns (uint8)', 'function symbol() view returns (string)'];
+      var provider = new ethers.providers.Web3Provider(window.ethereum);
+      var tempContract = new ethers.Contract(tokenAddr, abi, provider);
+      var bal = await tempContract.balanceOf(distContract.address);
+      var decimals = 18;
+      var symbol = '';
+      try { decimals = await tempContract.decimals(); } catch(_) {}
+      try { symbol = await tempContract.symbol(); } catch(_) {}
+      var formatted = ethers.utils.formatUnits(bal, decimals);
+      document.getElementById('rescueTokenBalance').value = parseFloat(formatted).toLocaleString(undefined,{maximumFractionDigits:6}) + ' ' + symbol;
+      rescueTokenContract = tempContract;
+      rescueTokenBalanceWei = bal.toString(); // 保存 wei 格式的余额
+      document.getElementById('btnRescueToken').disabled = bal.isZero();
+      if (bal.isZero()) {
+        alert('分红合约中没有该代币！');
+      }
+    } catch(e) {
+      alert('查询失败：' + e.message);
+    } finally {
+      document.getElementById('btnCheckRescueToken').disabled = false;
+    }
+  }
+
+  async function rescueToken() {
+    if (!distContract) { alert('请先加载分红合约！'); return; }
+    var tokenAddr = document.getElementById('rescueTokenAddr').value.trim();
+    if (!tokenAddr) { alert('请输入代币合约地址！'); return; }
+    var balText = document.getElementById('rescueTokenBalance').value;
+    if (!balText || balText === '点击查询') { alert('请先查询余额！'); return; }
+    if (!confirm('确认提取分红合约中全部的该代币到 platformOwner 地址？')) return;
+    try {
+      document.getElementById('btnRescueToken').disabled = true;
+      var s = document.getElementById('rescueTokenStatus');
+      s.className = 'status ok';
+      s.textContent = '⏳ 提取交易发送中...';
+      var tx;
+      // 先尝试新合约的 withdrawStuckToken（提取全部）
+      try {
+        tx = await distContract.withdrawStuckToken(tokenAddr);
+      } catch(_e1) {
+        // 新函数不存在，回退到旧合约的 withdrawToken（需要指定数量）
+        if (rescueTokenBalanceWei === '0') {
+          throw new Error('请先查询余额！');
+        }
+        tx = await distContract.withdrawToken(tokenAddr, rescueTokenBalanceWei);
+      }
+      await tx.wait(1);
+      s.textContent = '✅ 代币已提取到 platformOwner 地址';
+      document.getElementById('rescueTokenBalance').value = '0';
+      document.getElementById('btnRescueToken').disabled = true;
+    } catch(e) {
+      var s2 = document.getElementById('rescueTokenStatus');
+      s2.className = 'status err';
+      s2.textContent = '❌ 失败：' + e.message;
+    } finally { document.getElementById('btnRescueToken').disabled = false; }
+  }
+</script>
+</body>
+</html>

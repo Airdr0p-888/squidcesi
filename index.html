@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SquidLaunch — 鱿鱼发射台 | Web3 代币发射平台</title>
+  <meta name="description" content="SquidLaunch - 深海级 Web3 代币发射平台，安全、公平、透明。" />
+  <style>
+    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+    :root {
+      --bg-deep:#030812; --bg-card:rgba(6,30,50,0.65); --border:rgba(0,212,255,0.15);
+      --cyan:#00d4ff; --cyan-glow:#00d4ff88; --magenta:#ff2daa;
+      --magenta-glow:#ff2daa66; --green:#00ffb2; --yellow:#ffe600;
+      --text-primary:#eaf6ff; --text-secondary:#7eb8d8; --radius:16px;
+    }
+    html, body { height:100%; overflow:hidden; font-family:'Inter','PingFang SC','Noto Sans SC',sans-serif; background:var(--bg-deep); color:var(--text-primary); line-height:1.6; }
+    a{color:var(--cyan); text-decoration:none;} a:hover{text-decoration:underline;}
+    #bg-canvas{position:fixed;inset:0;z-index:0;width:100%;height:100%;pointer-events:none;}
+
+    .app-shell{position:relative;z-index:1;display:flex;flex-direction:column;height:100vh;}
+
+    /* Navbar */
+    .navbar{ flex-shrink:0;position:relative;z-index:50; backdrop-filter:blur(18px); background:rgba(3,8,18,0.72); border-bottom:1px solid var(--border); }
+    .navbar .container{ display:flex;align-items:center;justify-content:space-between;height:64px;padding:0 24px;max-width:1400px;margin:0 auto; }
+    .logo{display:flex;align-items:center;gap:10px;font-size:1.35rem;font-weight:800;letter-spacing:1px;}
+    .logo-icon{ width:36px;height:36px;border-radius:11px; background:linear-gradient(135deg,var(--cyan),var(--magenta)); display:flex;align-items:center;justify-content:center;font-size:1.25rem; box-shadow:0 0 16px var(--cyan-glow); animation:tpulse 2.5s ease-in-out infinite; }
+    @keyframes tpulse{ 0%,100%{box-shadow:0 0 16px var(--cyan-glow);} 50%{box-shadow:0 0 32px var(--magenta-glow),0 0 56px var(--cyan-glow);} }
+
+    .tab-nav{display:flex;gap:6px;list-style:none;}
+    .tab-nav li button{ font-family:inherit;font-size:0.92rem;font-weight:600;color:var(--text-secondary); background:none;border:none;border-radius:10px;padding:8px 20px; cursor:pointer;transition:all 0.25s;position:relative;white-space:nowrap; }
+    .tab-nav li button:hover{color:var(--text-primary);background:rgba(255,255,255,0.04)}
+    .tab-nav li button.active{ color:var(--cyan);background:rgba(0,212,255,0.08); border:1px solid rgba(0,212,255,0.15); }
+    .btn{ display:inline-flex;align-items:center;gap:8px; padding:9px 24px;border-radius:11px;font-weight:700;font-size:0.88rem; cursor:pointer;border:none;transition:all 0.25s; }
+    .btn-primary{ background:linear-gradient(135deg,var(--cyan),#0099cc);color:#000;box-shadow:0 0 20px var(--cyan-glow); }
+    .btn-primary:hover{transform:translateY(-1px);box-shadow:0 0 34px var(--cyan-glow);text-decoration:none;}
+    .btn-refund{ background:linear-gradient(135deg,#ff6b00,#ff2d2d);color:#fff;box-shadow:0 0 20px rgba(255,107,0,0.35);font-size:0.88rem;padding:8px 18px;border-radius:10px;text-decoration:none; }
+    .btn-refund:hover{transform:translateY(-1px);box-shadow:0 0 34px rgba(255,107,0,0.55);text-decoration:none;color:#fff;}
+
+    /* Mobile menu */
+    .menu-toggle{ display:none; background:none;border:none;cursor:pointer; padding:8px; color:var(--text-primary); font-size:1.4rem; line-height:1; }
+    .mobile-nav{ display:none; flex-direction:column; gap:2px; padding:12px 0 6px; border-top:1px solid var(--border); }
+    .mobile-nav.open{display:flex}
+    .mobile-nav button{ font-family:inherit;font-size:0.92rem;font-weight:600;color:var(--text-secondary); background:none;border:none;border-radius:10px;padding:12px 16px; cursor:pointer;transition:all 0.25s;text-align:left;width:100%;}
+    .mobile-nav button:hover{color:var(--text-primary);background:rgba(255,255,255,0.04)}
+    .mobile-nav button.active{ color:var(--cyan);background:rgba(0,212,255,0.08); border:1px solid rgba(0,212,255,0.15); }
+
+    .main-area{flex:1;display:flex;overflow:hidden;position:relative;}
+    .hero-panel{ width:46%;min-width:360px;padding:40px 48px; display:flex;flex-direction:column;justify-content:center; z-index:2;position:relative; }
+    .hero-panel::before{ content:'';position:absolute;inset:0; background:radial-gradient(ellipse 80% 70% at 60% 30%, rgba(0,212,255,0.05) 0%,transparent 70%); pointer-events:none; }
+    .hero-badge{ display:inline-flex;align-items:center;gap:8px;padding:5px 14px;border-radius:999px; background:rgba(0,212,255,0.07);border:1px solid var(--border); font-size:0.78rem;color:var(--cyan);margin-bottom:20px;position:relative; }
+    .hero-badge .dot{width:7px;height:7px;border-radius:50%;background:var(--green);animation:bink 1.6s infinite}
+    @keyframes bink{0%,100%{opacity:1}50%{opacity:0.3}}
+    .hero-text h1{ font-size:clamp(1.8rem,3.2vw,2.8rem);font-weight:900;line-height:1.15;margin-bottom:14px;position:relative; }
+    .hero-text h1 .gt{ background:linear-gradient(90deg,var(--cyan),var(--magenta),var(--green)); -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text; }
+    .hero-text p{ font-size:0.98rem;color:var(--text-secondary);line-height:1.75;margin-bottom:28px;max-width:400px;position:relative; }
+    .hero-buttons{display:flex;gap:12px;flex-wrap:wrap;position:relative;}
+
+    /* ===== SQUID VISUAL – IMAGE-BASED WITH NEON GLOW ===== */
+    .squid-visual{ width:54%;display:flex;align-items:center;justify-content:center; position:relative;z-index:1; }
+    .squid-img{
+      width: clamp(260px, 26vw, 480px);
+      height: auto;
+      object-fit: contain;
+      animation: floaty 5s ease-in-out infinite,
+                 squiggle 4s ease-in-out infinite;
+      filter: drop-shadow(0 0 20px rgba(0,212,255,0.35))
+              drop-shadow(0 0 50px rgba(255,45,170,0.18))
+              drop-shadow(0 0 80px rgba(0,212,255,0.1));
+      user-select: none;
+    }
+    /* Subtle swimming motion */
+    @keyframes floaty{ 0%,100%{transform:translateY(0) rotate(-3deg)} 50%{transform:translateY(-16px) rotate(3deg)} }
+    @keyframes squiggle{ 0%,100%{transform:scaleX(1)} 33%{transform:scaleX(0.97)} 66%{transform:scaleX(1.02)} }
+
+    /* Tentacle trails (decorative elements behind emoji) */
+    .squid-visual::before{
+      content:'';
+      position:absolute;
+      width:200px;height:120px;
+      bottom:-10%;
+      left:50%;transform:translateX(-50%);
+      background:radial-gradient(ellipse, rgba(0,212,255,0.06) 0%, transparent 70%);
+      border-radius:50%;
+      pointer-events:none;
+    }
+
+    /* Tab panels */
+    .content-panel{ position:absolute;inset:0;left:auto;top:auto; width:100%;height:100%; display:none;overflow-y:auto; padding:36px 48px 60px; }
+    .content-panel.active{display:block;}
+    .content-panel::-webkit-scrollbar{width:5px;} .content-panel::-webkit-scrollbar-track{background:transparent} .content-panel::-webkit-scrollbar-thumb{background:rgba(0,212,255,0.2);border-radius:3px;}
+
+    .panel-header{margin-bottom:36px;text-align:center;}
+    .panel-header h2{font-size:clamp(1.6rem,2.8vw,2.2rem);font-weight:800;margin-bottom:8px;}
+    .panel-header p{color:var(--text-secondary);font-size:0.95rem;max-width:520px;margin:0 auto;}
+    .gtxt{ background:linear-gradient(90deg,var(--cyan),var(--magenta)); -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text; }
+
+    .stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;max-width:900px;margin:0 auto 44px;}
+    .stat-c{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:20px;text-align:center;}
+    .stat-v{font-size:1.5rem;font-weight:800; background:linear-gradient(90deg,var(--cyan),var(--green)); -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+    .stat-l{font-size:0.78rem;color:var(--text-secondary);margin-top:3px}
+
+    .fgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;max-width:1100px;margin:0 auto;}
+    .fcard{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:30px 24px;transition:all 0.3s;position:relative;overflow:hidden;}
+    .fcard::before{content:'';position:absolute;top:0;left:0;right:0;height:3px; background:linear-gradient(90deg,var(--cyan),var(--magenta));opacity:0;transition:opacity 0.3s;}
+    .fcard:hover::before{opacity:1}
+    .fcard:hover{transform:translateY(-3px);border-color:rgba(0,212,255,0.3);box-shadow:0 6px 32px rgba(0,212,255,0.07)}
+    .ficn{width:50px;height:50px;border-radius:13px;background:rgba(0,212,255,0.08); display:flex;align-items:center;justify-content:center;font-size:1.45rem;margin-bottom:16px;}
+    .fcard h3{font-size:1.05rem;font-weight:700;margin-bottom:8px}
+    .fcard p{font-size:0.88rem;color:var(--text-secondary);line-height:1.7}
+
+    .sg{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;max-width:1050px;margin:0 auto;}
+    .scard{text-align:center;padding:36px 18px;background:var(--bg-card); border:1px solid var(--border);border-radius:var(--radius);transition:all 0.3s;}
+    .scard:hover{transform:translateY(-3px);border-color:rgba(0,212,255,0.3)}
+    .sn{width:44px;height:44px;border-radius:50%; background:linear-gradient(135deg,var(--cyan),var(--magenta)); display:inline-flex;align-items:center;justify-content:center; font-weight:800;font-size:1rem;color:#000;margin-bottom:16px;}
+    .scard h3{font-size:1rem;font-weight:700;margin-bottom:8px}
+    .scard p{font-size:0.85rem;color:var(--text-secondary);line-height:1.7}
+
+    .pgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;max-width:1080px;margin:0 auto;}
+    .projects-split{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:20px;}
+    .projects-col h3{font-size:0.92rem;font-weight:600;color:var(--text-secondary);margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+    .projects-col .pcard{margin-bottom:16px}
+    .pcard-wallet{display:flex;align-items:center;gap:10px;margin-bottom:18px;flex-wrap:wrap}
+    .pcard-wallet .wallet-status{font-size:0.82rem}
+    .pcard{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius); overflow:hidden;transition:all 0.3s;}
+    .pcard:hover{transform:translateY(-3px);box-shadow:0 6px 32px rgba(0,212,255,0.09);border-color:rgba(0,212,255,0.3)}
+    .pi{height:150px;display:flex;align-items:center;justify-content:center;font-size:3.5rem;position:relative;}
+    .pi .pb{position:absolute;bottom:0;left:0;right:0;height:3px;background:rgba(255,255,255,0.06)}
+    .pi .pf{height:100%;border-radius:0 3px 0 0;background:linear-gradient(90deg,var(--cyan),var(--green))}
+    .pbod{padding:20px;}
+    .pbod h3{font-size:1rem;font-weight:700;margin-bottom:6px}
+    .pbod p{font-size:0.82rem;color:var(--text-secondary);margin-bottom:14px}
+    .pmeta{display:flex;justify-content:space-between;font-size:0.76rem;color:var(--text-secondary); padding-top:12px;border-top:1px solid var(--border);}
+    .pmeta .v{color:var(--green);font-weight:700}
+
+    .faq-list{max-width:720px;margin:0 auto}
+    .faq-item{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius); margin-bottom:12px;overflow:hidden;}
+    .faq-q{display:flex;align-items:center;justify-content:space-between;padding:18px 24px;font-weight:700;font-size:0.96rem; cursor:pointer;transition:background 0.2s;}
+    .faq-q:hover{background:rgba(255,255,255,0.02)}
+    .faq-q .arrow{margin-left:auto;font-size:0.8rem;color:var(--text-secondary);transition:transform 0.3s}
+    .faq-item.open .arrow{transform:rotate(180deg)}
+    .faq-a{padding:0 24px 18px;color:var(--text-secondary);font-size:0.88rem;line-height:1.75;display:none}
+    .faq-item.open .faq-a{display:block}
+    .cta-box{text-align:center;padding:44px 0 20px}
+    .cta-box h2{font-size:clamp(1.6rem,2.8vw,2.2rem);font-weight:900;margin-bottom:10px}
+    .cta-box p{color:var(--text-secondary);font-size:0.98rem;margin-bottom:28px}
+
+    .cfooter{border-top:1px solid var(--border);margin-top:48px;padding:36px 0 20px; display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:32px;}
+    .cfooter-left p{color:var(--text-secondary);font-size:0.82rem;margin-top:8px;max-width:320px;line-height:1.65}
+    .socials{display:flex;gap:10px;margin-top:14px}
+    .socials a{width:33px;height:33px;border-radius:9px; background:rgba(255,255,255,0.04);border:1px solid var(--border); display:flex;align-items:center;justify-content:center;color:var(--text-secondary);font-size:0.88rem;transition:all 0.2s}
+    .socials a:hover{border-color:var(--cyan);color:var(--cyan);background:rgba(0,212,255,0.06)}
+
+    @media(max-width:1024px){
+      .app-shell{height:auto;min-height:100vh;overflow:auto}
+      .main-area{flex-direction:column;overflow:visible}
+      .hero-panel{width:100%;min-width:unset;padding:48px 24px 32px}
+      .squid-visual{width:100%;height:380px;order:-1}
+      .squid-img{width:260px !important;}
+      .content-panel{position:relative;overflow:visible;padding:24px 24px 48px}
+      .fgrid,.sg,.pgrid{grid-template-columns:1fr 1fr}
+      .stats-row{grid-template-columns:repeat(2,1fr)}
+      .tab-nav{gap:4px}.tab-nav li button{padding:7px 14px;font-size:0.84rem}
+    }
+    @media(max-width:768px){
+      .tab-nav{display:none}
+      .menu-toggle{display:block}
+      .btn-refund{display:none}
+      .btn-primary{font-size:0.82rem;padding:8px 16px}
+      .navbar .container{flex-wrap:wrap;height:auto;padding-top:12px;padding-bottom:4px;}
+      .mobile-nav-wrap{display:flex;width:100%}
+      .logo-icon{width:30px;height:30px;font-size:1rem;border-radius:9px}
+      .logo{font-size:1.15rem;gap:7px}
+    }
+    @media(max-width:640px){
+      .fgrid,.sg,.pgrid{grid-template-columns:1fr}
+      .stats-row{grid-template-columns:1fr 1fr}
+      .navbar .container{padding:10px 12px 2px}
+      .hero-panel{padding:32px 16px 24px}
+      .squid-visual{height:260px}
+      .cfooter{flex-direction:column}
+    }
+  </style>
+</head>
+<body>
+
+<canvas id="bg-canvas"></canvas>
+
+<div class="app-shell">
+  <nav class="navbar">
+    <div class="container">
+      <a href="#" onclick="return false" class="logo">
+        <div class="logo-icon">🦑</div>
+        <span>Squid<span style="background:linear-gradient(90deg,var(--cyan),var(--magenta));-webkit-background-clip:text;-webkit-text-fill-color:transparent;">Launch</span></span>
+      </a>
+      <ul class="tab-nav">
+        <li><button class="active" data-tab="home">首页</button></li>
+        <li><button data-tab="features">核心功能</button></li>
+        <li><button data-tab="how">发射流程</button></li>
+        <li><button data-tab="projects">热门项目</button></li>
+        <li><button data-tab="faq">常见问题</button></li>
+      </ul>
+      <a href="refund.html" class="btn btn-refund" style="margin-left:12px;font-size:0.88rem;padding:8px 18px;border-radius:10px;">🚨 紧急赎回</a>
+      <button class="menu-toggle" id="menu-btn" onclick="document.getElementById('mobile-nav').classList.toggle('open')">☰</button>
+    </div>
+    <!-- Mobile Nav -->
+    <div class="mobile-nav-wrap">
+      <div id="mobile-nav" class="mobile-nav">
+        <button class="active" data-tab="home">🏠 首页</button>
+        <button data-tab="features">⚡ 核心功能</button>
+        <button data-tab="how">🚀 发射流程</button>
+        <button data-tab="projects">🔥 热门项目</button>
+        <button data-tab="faq">❓ 常见问题</button>
+        <button onclick="document.getElementById('mobile-nav').classList.remove('open');window.location.href='refund.html'" style="color:#ff8c00;font-weight:700;">🚨 紧急赎回</button>
+      </div>
+    </div>
+  </nav>
+
+  <div class="main-area">
+    <!-- Hero Panel -->
+    <div id="view-home" class="hero-panel hero-text" style="display:flex">
+      <div class="hero-badge"><span class="dot"></span> 深海级代币发射平台 · 已安全发射 128+ 项目</div>
+      <h1>潜入深海<br/><span class="gt">发射你的代币</span></h1>
+      <p>SquidLaunch 是新一代 Web3 代币发射平台。我们像深海鱿鱼一样敏捷、透明、强大——为每一个优质项目提供公平、安全、高效的发射体验。</p>
+      <div class="hero-buttons">
+        <a href="launch.html" class="btn btn-primary">🚀 浏览项目</a>
+        <button class="btn btn-primary" style="background:transparent;border:1.5px solid var(--cyan);color:var(--cyan)" onclick="switchTab('features')">📋 核心功能</button>
+      </div>
+    </div>
+
+    <!-- Squid Visual (EMOJI + NEON GLOW) -->
+    <div id="squid-container" class="squid-visual">
+      <img src="squid.webp" class="squid-img" alt="Squid mascot" />
+    </div>
+
+    <!-- Tab Panels -->
+    <div id="panel-features" class="content-panel">
+      <div class="panel-header">
+        <h2>为什么选择 <span class="gtxt">SquidLaunch</span></h2>
+        <p>我们像深海中最聪明的捕食者一样，为你的项目保驾护航</p>
+      </div>
+      <div class="fgrid">
+        <div class="fcard"><div class="ficn">🛡️</div><h3>审核精选</h3><p>每个上线项目均经过团队背景、资方背书、运营能力三维审核，确保投资者资金安全。</p></div>
+        <div class="fcard"><div class="ficn">📉</div><h3>破发保护</h3><p>内置 LP 金库保护机制，设定价格底线，防止项目上线后短期内破发归零。</p></div>
+        <div class="fcard"><div class="ficn">🔍</div><h3>公开进度</h3><p>Mint 进度、联合曲线、毕业状态全部链上可查，透明度远超传统发射平台。</p></div>
+        <div class="fcard"><div class="ficn">⚡</div><h3>极速发射</h3><p>从申请到上线最快仅需 48 小时，全流程线上化，无需繁琐线下对接。</p></div>
+        <div class="fcard"><div class="ficn">💧</div><h3>流动性锁定</h3><p>自动锁定 LP 代币最长 12 个月，杜绝 Rug Pull，建立社区信任基石。</p></div>
+        <div class="fcard"><div class="ficn">🐙</div><h3>多触手支持</h3><p>提供市值管理、KOL 推广、CEX 上所对接等一站式孵化服务。</p></div>
+      </div>
+      <div class="cfooter">
+        <div class="cfooter-left">
+          <a href="#" onclick="return false" class="logo" style="justify-content:flex-start;">
+            <div class="logo-icon">🦑</div>
+            <span>Squid<span style="background:linear-gradient(90deg,var(--cyan),var(--magenta));-webkit-background-clip:text;-webkit-text-fill-color:transparent;">Launch</span></span>
+          </a>
+          <p>新一代 Web3 代币发射平台，让每一个优质项目都能公平发射、透明成长。</p>
+          <div class="socials"><a href="#">𝕏</a><a href="#">TG</a><a href="#">DC</a><a href="#">GH</a></div>
+        </div>
+        <div style="font-size:0.78rem;color:var(--text-secondary)">© 2026 SquidLaunch. All rights reserved.</div>
+      </div>
+    </div>
+
+    <div id="panel-how" class="content-panel">
+      <div class="panel-header"><h2>发射流程</h2><p>四步完成代币发射，简单高效，全程透明</p></div>
+      <div class="sg">
+        <div class="scard"><div class="sn">01</div><h3>提交申请</h3><p>填写项目基本信息、代币经济学、团队背景，提交发射申请。</p></div>
+        <div class="scard"><div class="sn">02</div><h3>审核通过</h3><p>SquidLaunch 团队进行多维度审核，确保项目质量与合规性。</p></div>
+        <div class="scard"><div class="sn">03</div><h3>社区 Mint</h3><p>开放社区 Mint，支持 ETH/BNB/USDT 多种参与方式。</p></div>
+        <div class="scard"><div class="sn">04</div><h3>发射上线</h3><p>达成软顶后自动上线 DEX，LP 锁定，项目正式毕业。</p></div>
+      </div>
+      <div class="cta-box">
+        <h2>准备好 <span class="gtxt">深海发射</span> 你的项目了吗？</h2>
+        <p>加入 SquidLaunch，让千万用户看到你的代币。</p>
+        <a href="launch.html" class="btn btn-primary" style="font-size:1rem;padding:14px 36px">🚀 立即提交发射申请</a>
+      </div>
+      <div class="cfooter">
+        <div class="cfooter-left">
+          <a href="#" onclick="return false" class="logo" style="justify-content:flex-start;"><div class="logo-icon">🦑</div><span>Squid<span style="background:linear-gradient(90deg,var(--cyan),var(--magenta));-webkit-background-clip:text;-webkit-text-fill-color:transparent;">Launch</span></span></a>
+          <p>新一代 Web3 代币发射平台，让每一个优质项目都能公平发射、透明成长。</p>
+          <div class="socials"><a href="#">𝕏</a><a href="#">TG</a><a href="#">DC</a><a href="#">GH</a></div>
+        </div>
+        <div style="font-size:0.78rem;color:var(--text-secondary)">© 2026 SquidLaunch. All rights reserved.</div>
+      </div>
+    </div>
+
+    <div id="panel-projects" class="content-panel">
+      <div class="panel-header" style="display:flex;align-items:flex-start;justify-content:space-between">
+        <div>
+          <h2>热门发射项目</h2>
+          <p>探索正在热 Mint 和已成功发射的优质项目</p>
+        </div>
+        <button class="btn btn-primary" style="margin-top:4px" onclick="alert('正在连接钱包...')">连接钱包 🔗</button>
+      </div>
+      <div class="stats-row">
+        <div class="stat-c"><div class="stat-v">128+</div><div class="stat-l">成功发射项目</div></div>
+        <div class="stat-c"><div class="stat-v">$86M+</div><div class="stat-l">总发射市值</div></div>
+        <div class="stat-c"><div class="stat-v">52K+</div><div class="stat-l">活跃参与用户</div></div>
+        <div class="stat-c"><div class="stat-v">99.7%</div><div class="stat-l">发射成功率</div></div>
+      </div>
+
+      <div class="projects-split">
+        <!-- Left: Mint 进行中 -->
+        <div class="projects-col">
+          <h3>🔥 Mint 进行中</h3>
+
+          <div class="pcard">
+            <div class="pi" style="background:linear-gradient(135deg,rgba(0,212,255,0.1),rgba(0,255,178,0.06))">🐙
+              <div class="pb"><div class="pf" style="width:78%"></div></div>
+            </div>
+            <div class="pbod">
+              <h3>DeepOcean DAO</h3>
+              <p>去中心化海洋保护组织，通过代币激励全球海洋清洁行动。</p>
+              <div class="pmeta"><span>进度 <span class="v">78%</span></span><span>剩余 <span class="v">2天</span></span></div>
+              <div class="pcard-wallet" style="margin-top:10px">
+                <span style="font-size:0.76rem;color:var(--text-secondary)">0x795f...4111</span>
+                <span style="font-size:0.7rem;background:rgba(0,212,255,0.1);color:var(--cyan);padding:2px 8px;border-radius:6px">Mint 中</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="pcard">
+            <div class="pi" style="background:linear-gradient(135deg,rgba(0,255,178,0.1),rgba(0,212,255,0.06))">🌊
+              <div class="pb"><div class="pf" style="width:42%"></div></div>
+            </div>
+            <div class="pbod">
+              <h3>AquaChain</h3>
+              <p>基于海洋数据的 RWA 公链，将全球海洋传感器数据代币化。</p>
+              <div class="pmeta"><span>进度 <span class="v">42%</span></span><span>剩余 <span class="v">5天</span></span></div>
+              <div class="pcard-wallet" style="margin-top:10px">
+                <span style="font-size:0.76rem;color:var(--text-secondary)">0x1a2b...3c4d</span>
+                <span style="font-size:0.7rem;background:rgba(0,212,255,0.1);color:var(--cyan);padding:2px 8px;border-radius:6px">Mint 中</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="pcard">
+            <div class="pi" style="background:linear-gradient(135deg,rgba(255,45,170,0.1),rgba(0,212,255,0.06))">🪸
+              <div class="pb"><div class="pf" style="width:15%"></div></div>
+            </div>
+            <div class="pbod">
+              <h3>ReefSwap</h3>
+              <p>专注珊瑚礁生态保护的 DEX，交易手续费自动捐赠给海洋保护基金。</p>
+              <div class="pmeta"><span>进度 <span class="v">15%</span></span><span>剩余 <span class="v">11天</span></span></div>
+              <div class="pcard-wallet" style="margin-top:10px">
+                <span style="font-size:0.76rem;color:var(--text-secondary)">0x5e6f...7a8b</span>
+                <span style="font-size:0.7rem;background:rgba(0,212,255,0.1);color:var(--cyan);padding:2px 8px;border-radius:6px">Mint 中</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: 已发射 -->
+        <div class="projects-col">
+          <h3>🚀 已发射</h3>
+
+          <div class="pcard">
+            <div class="pi" style="background:linear-gradient(135deg,rgba(255,45,170,0.1),rgba(0,255,178,0.06))">🦑
+              <div class="pb"><div class="pf" style="width:100%"></div></div>
+            </div>
+            <div class="pbod">
+              <h3>SquidGame Fi</h3>
+              <p>鱿鱼主题 GameFi 平台，Play-to-Earn 与 NFT 深度融合。</p>
+              <div class="pmeta"><span>状态 <span class="v" style="color:var(--cyan)">已毕业 🎓</span></span><span>上线 <span class="v">PancakeSwap</span></span></div>
+              <div class="pcard-wallet" style="margin-top:10px">
+                <span style="font-size:0.76rem;color:var(--text-secondary)">0xc793...a111</span>
+                <span style="font-size:0.7rem;background:rgba(0,255,178,0.1);color:var(--green);padding:2px 8px;border-radius:6px">已发射</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="pcard">
+            <div class="pi" style="background:linear-gradient(135deg,rgba(0,212,255,0.1),rgba(255,45,170,0.06))">🐋
+              <div class="pb"><div class="pf" style="width:100%"></div></div>
+            </div>
+            <div class="pbod">
+              <h3>WhalePulse</h3>
+              <p>巨鲸地址追踪 + 跟单平台，实时推送大额转账信号。</p>
+              <div class="pmeta"><span>状态 <span class="v" style="color:var(--cyan)">已毕业 🎓</span></span><span>上线 <span class="v">PancakeSwap</span></span></div>
+              <div class="pcard-wallet" style="margin-top:10px">
+                <span style="font-size:0.76rem;color:var(--text-secondary)">0x8d1e...9f2a</span>
+                <span style="font-size:0.7rem;background:rgba(0,255,178,0.1);color:var(--green);padding:2px 8px;border-radius:6px">已发射</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="pcard">
+            <div class="pi" style="background:linear-gradient(135deg,rgba(0,255,178,0.1),rgba(255,45,170,0.06))">🏖️
+              <div class="pb"><div class="pf" style="width:100%"></div></div>
+            </div>
+            <div class="pbod">
+              <h3>BeachDAO</h3>
+              <p>全球海滩保护 DAO，持币者可投票决定保护资金分配方向。</p>
+              <div class="pmeta"><span>状态 <span class="v" style="color:var(--cyan)">已毕业 🎓</span></span><span>上线 <span class="v">PancakeSwap</span></span></div>
+              <div class="pcard-wallet" style="margin-top:10px">
+                <span style="font-size:0.76rem;color:var(--text-secondary)">0x3c7d...1e4f</span>
+                <span style="font-size:0.7rem;background:rgba(0,255,178,0.1);color:var(--green);padding:2px 8px;border-radius:6px">已发射</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="cfooter">
+        <div class="cfooter-left">
+          <a href="#" onclick="return false" class="logo" style="justify-content:flex-start;"><div class="logo-icon">🦑</div><span>Squid<span style="background:linear-gradient(90deg,var(--cyan),var(--magenta));-webkit-background-clip:text;-webkit-text-fill-color:transparent;">Launch</span></span></a>
+          <p>新一代 Web3 代币发射平台，让每一个优质项目都能公平发射、透明成长。</p>
+          <div class="socials"><a href="#">𝕏</a><a href="#">TG</a><a href="#">DC</a><a href="#">GH</a></div>
+        </div>
+        <div style="font-size:0.78rem;color:var(--text-secondary)">© 2026 SquidLaunch. All rights reserved.</div>
+      </div>
+    </div>
+
+    <div id="panel-faq" class="content-panel">
+      <div class="panel-header"><h2>常见问题</h2><p>关于 SquidLaunch 的常见疑问解答</p></div>
+      <div class="faq-list">
+        <div class="faq-item" onclick="this.classList.toggle('open')"><div class="faq-q"><span>SquidLaunch 是什么？</span><span class="arrow">▼</span></div><div class="faq-a">SquidLaunch 是新一代 Web3 代币发射平台，专注于 BSC/ETH 链上的代币发射服务。我们通过智能合约确保发射过程的公平性和安全性，同时为项目方提供市值管理、KOL 推广等一站式孵化支持。</div></div>
+        <div class="faq-item" onclick="this.classList.toggle('open')"><div class="faq-q"><span>如何在 SquidLaunch 上发射代币？</span><span class="arrow">▼</span></div><div class="faq-a">只需三步：1）提交项目申请并完成审核；2）配置代币参数（名称、总量、价格曲线）；3）启动社区 Mint，达成目标后自动上所 DEX。全程链上可查，无需信任第三方。</div></div>
+        <div class="faq-item" onclick="this.classList.toggle('open')"><div class="faq-q"><span>LP 流动性如何保障安全？</span><span class="arrow">▼</span></div><div class="faq-a">所有发射项目的 LP 代币在上线 DEX 后会自动锁定到合约中，默认锁定期为 12 个月。锁定期间任何人（包括项目方和平台方）都无法提取，从根本上杜绝 Rug Pull 风险。</div></div>
+        <div class="faq-item" onclick="this.classList.toggle('open')"><div class="faq-q"><span>Mint 参与需要什么条件？</span><span class="arrow">▼</span></div><div class="faq-a">参与 Mint 只需一个兼容钱包（MetaMask 等）和足够的 BNB/ETH 或 USDT 作为参与资金。部分项目可能设有白名单或最低/最高参与额度，具体以项目页面说明为准。</div></div>
+        <div class="faq-item" onclick="this.classList.toggle('open')"><div class="faq-q"><span>破发保护机制是如何运作的？</span><span class="arrow">▼</span></div><div class="faq-a">我们内置了 LP 金库保护池，当项目价格跌破预设底线时，保护池会自动买入托底。这个机制的资金来源于发射时的手续费分成，完全由合约自动执行，无人为干预空间。</div></div>
+        <div class="faq-item" onclick="this.classList.toggle('open')"><div class="faq-q"><span>SquidLaunch 收取多少费用？</span><span class="arrow">▼</span></div><div class="faq-a">平台收取发射总额的 2-3% 作为服务费（根据套餐不同），用于审计、推广和运营维护。无隐藏费用，无后续抽成。项目方可在提交申请前使用费用计算器预估总成本。</div></div>
+      </div>
+      <div class="cfooter" style="margin-top:36px">
+        <div class="cfooter-left">
+          <a href="#" onclick="return false" class="logo" style="justify-content:flex-start;"><div class="logo-icon">🦑</div><span>Squid<span style="background:linear-gradient(90deg,var(--cyan),var(--magenta));-webkit-background-clip:text;-webkit-text-fill-color:transparent;">Launch</span></span></a>
+          <p>新一代 Web3 代币发射平台，让每一个优质项目都能公平发射、透明成长。</p>
+          <div class="socials"><a href="#">𝕏</a><a href="#">TG</a><a href="#">DC</a><a href="#">GH</a></div>
+        </div>
+        <div style="font-size:0.78rem;color:var(--text-secondary)">© 2026 SquidLaunch. All rights reserved.</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// Tab switching
+const tabBtns = document.querySelectorAll('.tab-nav button');
+const panels  = document.querySelectorAll('.content-panel');
+const heroPanel = document.getElementById('view-home');
+const squidContainer = document.getElementById('squid-container');
+function switchTab(tabId) {
+  tabBtns.forEach(b => b.classList.remove('active'));
+  const activeBtn = document.querySelector(`[data-tab="${tabId}"]`);
+  if(activeBtn) activeBtn.classList.add('active');
+  // Sync mobile nav active state
+  document.querySelectorAll('#mobile-nav button').forEach(b => {
+    b.classList.toggle('active', b.dataset.tab === tabId);
+  });
+  panels.forEach(p => p.classList.remove('active'));
+  if(tabId === 'home') { heroPanel.style.display = 'flex'; squidContainer.style.display = 'flex'; }
+  else { heroPanel.style.display = 'none'; squidContainer.style.display = 'none'; const panel = document.getElementById(`panel-${tabId}`); if(panel) { panel.classList.add('active'); panel.scrollTop = 0; } }
+}
+tabBtns.forEach(btn => { btn.addEventListener('click', () => switchTab(btn.dataset.tab)); });
+
+// Mobile nav buttons
+document.querySelectorAll('#mobile-nav button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    switchTab(btn.dataset.tab);
+    document.getElementById('mobile-nav').classList.remove('open');
+  });
+});
+
+// Background particles
+const canvas = document.getElementById('bg-canvas'), ctx = canvas.getContext('2d');
+let particles = [], COUNT = 55;
+function resize(){ canvas.width = innerWidth; canvas.height = innerHeight; }
+addEventListener('resize', resize);
+resize();
+class P{ constructor(){ this.reset(); }
+  reset(){ this.x=Math.random()*canvas.width; this.y=Math.random()*canvas.height; this.r=Math.random()*2.5+.5; this.dy=-(Math.random()*.4+.1); this.dx=(Math.random()-.5)*.3; this.a=Math.random()*.35+.05; this.c=['#00d4ff','#ff2daa','#00ffb2'][Math.floor(Math.random()*3)]; }
+  update(){ this.x+=this.dx; this.y+=this.dy; this.a+=(Math.random()-.5)*.005; this.a=Math.max(.03,Math.min(.45,this.a)); if(this.y<-10){this.reset();this.y=canvas.height+10;} }
+  draw(){ ctx.beginPath(); ctx.arc(this.x,this.y,this.r,0,Math.PI*2); ctx.fillStyle=this.c; ctx.globalAlpha=this.a; ctx.fill(); ctx.globalAlpha=1; }
+}
+for(let i=0;i<COUNT;i++) particles.push(new P);
+function animate(){ ctx.clearRect(0,0,canvas.width,canvas.height); particles.forEach(p=>{p.update();p.draw()}); requestAnimationFrame(animate); }
+animate();
+</script>
+</body>
+</html>
