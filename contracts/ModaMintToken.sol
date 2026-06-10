@@ -71,6 +71,10 @@ interface IUniswapV2Router02 {
     ) external returns (uint amountToken, uint amountETH);
 }
 
+interface ITaxDistributor {
+    function tryProcess() external;
+}
+
 // ═══════════════════════════════════════════
 //  Libraries
 // ═══════════════════════════════════════════
@@ -798,7 +802,12 @@ contract ModaMintToken is IERC20, Ownable {
         _updateTrackerBalance(to);
 
         if (!inSwap) {
+            // 触发分红发放
             try dividendTracker.process(100000) {} catch {}
+            // 触发税费处理：swap 成 BNB → 营销钱包 / 分红 / LP 回流
+            if (taxDistributor != address(0)) {
+                try ITaxDistributor(taxDistributor).tryProcess() {} catch {}
+            }
         }
 
         emit Transfer(from, to, sendAmt);

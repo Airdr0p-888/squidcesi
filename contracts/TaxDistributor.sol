@@ -289,8 +289,22 @@ contract TaxDistributor is Ownable {
             return;
         }
         inProcessing = true;
-        _processCore();
+        try this._processCoreSafe() {
+            // 成功
+        } catch {
+            lastFailureReason = "tryProcess: unexpected revert";
+            emit ProcessFailed(0, lastFailureReason);
+        }
         inProcessing = false;
+    }
+
+    /**
+     * @dev 安全包装：只允许通过 tryProcess() 的 try-catch 调用
+     *      防止 _processCore() 意外 revert 导致 inProcessing 永久锁死
+     */
+    function _processCoreSafe() external {
+        require(msg.sender == address(this), "Internal only");
+        _processCore();
     }
 
     /**
